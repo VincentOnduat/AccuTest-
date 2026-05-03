@@ -4,12 +4,21 @@
 
 <!-- BADGES - Replace 'YourUsername' with your GitHub username -->
 <p align="center">
-  <img src="https://github.com/VincentOnduat/AccuTest/actions/workflows/main.yml/badge.svg" alt="CI/CD">
-  <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/TypeScript-5.0-3178C6.svg?logo=typescript" alt="TypeScript">
-  <img src="https://img.shields.io/badge/SvelteKit-2.0-FF3E00.svg?logo=svelte" alt="SvelteKit">
-  <img src="https://img.shields.io/badge/Supabase-3ECF8E.svg?logo=supabase" alt="Supabase">
-  <img src="https://img.shields.io/badge/OpenAI-GPT--4-412991.svg?logo=openai" alt="OpenAI">
+  <a href="https://github.com/VincentOnduat/AccuTest/actions/workflows/main.yml">
+    <img src="https://github.com/VincentOnduat/AccuTest/actions/workflows/main.yml/badge.svg" alt="CI/CD">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License">
+  </a>
+  <a href="https://kit.svelte.dev/">
+    <img src="https://img.shields.io/badge/SvelteKit-2.0-FF3E00.svg?logo=svelte" alt="SvelteKit">
+  </a>
+  <a href="https://www.typescriptlang.org/">
+    <img src="https://img.shields.io/badge/TypeScript-5.0-3178C6.svg?logo=typescript" alt="TypeScript">
+  </a>
+  <a href="https://supabase.com/">
+    <img src="https://img.shields.io/badge/Supabase-3ECF8E.svg?logo=supabase" alt="Supabase">
+  </a>
 </p>
 
 ## 📋 Table of Contents
