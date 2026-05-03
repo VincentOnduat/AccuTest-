@@ -4,7 +4,7 @@
 
 <!-- BADGES - Replace 'YourUsername' with your GitHub username -->
 <p align="center">
-  <img src="https://github.com/YourUsername/AccuTest/actions/workflows/test-automation.yml/badge.svg" alt="CI/CD">
+  <img src="https://github.com/VincentOnduat/AccuTest/actions/workflows/main.yml/badge.svg" alt="CI/CD">
   <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/TypeScript-5.0-3178C6.svg?logo=typescript" alt="TypeScript">
   <img src="https://img.shields.io/badge/SvelteKit-2.0-FF3E00.svg?logo=svelte" alt="SvelteKit">
@@ -40,7 +40,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/YourUsername/AccuTest.git
+git clone https://github.com/VincentOnduat/AccuTest.git
 cd AccuTest/frontend
 
 # Install dependencies
