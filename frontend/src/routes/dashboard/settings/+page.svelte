@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { supabase } from '$lib/supabase.ts.backup';
+  import { supabase } from '$lib/supabase';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
 
