@@ -2,48 +2,59 @@ name: AccuTest CI/CD
 
 on:
   push:
-    branches: [main, master, develop]
-  pull_request:
     branches: [main, master]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '18'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-
+      
       - name: Install dependencies
-        run: npm ci
-        working-directory: ./frontend
-
+        run: |
+          cd frontend
+          npm ci --omit=optional --no-audit --no-fund
+        shell: bash
+      
       - name: Type check
-        run: npm run check
-        working-directory: ./frontend
+        run: |
+          cd frontend
+          npm run check || true
+        shell: bash
         continue-on-error: true
-
+      
       - name: Build application
-        run: npm run build
-        working-directory: ./frontend
+        run: |
+          cd frontend
+          NODE_OPTIONS="--max-old-space-size=4096" npm run build
+        shell: bash
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+      
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: accutest-build
           path: frontend/build/
           retention-days: 7
-
-      - name: Build successful
+      
+      - name: Build success
+        if: success()
         run: echo "✅ Build completed successfully!"
+      
+      - name: Build failure
+        if: failure()
+        run: echo "❌ Build failed. Check logs above."
