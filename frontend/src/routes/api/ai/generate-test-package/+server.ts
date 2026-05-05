@@ -3,18 +3,19 @@ import { generateText } from 'ai';
 import { json } from '@sveltejs/kit';
 import { createServerClient } from '@supabase/ssr';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
-import { hasOpenAI, getOpenAIConfig } from '$lib/openai';
+import { hasOpenAI, getOpenAIConfig } from '$lib/server/openai';  // Import from server only
 
 export async function POST({ request, cookies }) {
   try {
-    // Check if OpenAI is available FIRST
+    // Check if OpenAI is available
     if (!hasOpenAI) {
       return json({ 
-        error: 'OpenAI API key not configured. Please add OPENAI_API_KEY to your environment variables.',
-        solution: 'Add OPENAI_API_KEY to your .env file or GitHub secrets'
+        error: 'OpenAI API key not configured',
+        message: 'Please add OPENAI_API_KEY to your environment variables'
       }, { status: 503 });
     }
 
+    // Rest of your code...
     const supabase = createServerClient(
       PUBLIC_SUPABASE_URL,
       PUBLIC_SUPABASE_ANON_KEY,
@@ -35,58 +36,26 @@ export async function POST({ request, cookies }) {
     const body = await request.json();
     const { atrdContent, requirements, name, atrdId, document } = body;
     
-    // Handle different input formats
     let contentToUse = atrdContent || requirements || document;
     
     if (!contentToUse) {
       return json({ error: 'Missing requirements, ATRD content, or document' }, { status: 400 });
     }
     
-    // If contentToUse is a string, try to parse it as JSON
     if (typeof contentToUse === 'string') {
       try {
         contentToUse = JSON.parse(contentToUse);
       } catch (e) {
-        // Keep as string if not JSON
+        // Keep as string
       }
     }
     
-    // Create OpenAI client with the API key
     const openai = createOpenAI({ apiKey: getOpenAIConfig().apiKey });
     
-    const systemPrompt = `You are a test automation expert. Generate a comprehensive test package from the provided requirements.
-
-Return ONLY valid JSON with this exact structure:
-{
-  "testCases": [
-    {
-      "id": "TC001",
-      "name": "Test case name",
-      "description": "What this test verifies",
-      "priority": "Critical",
-      "type": "API",
-      "steps": ["Step 1", "Step 2"],
-      "expectedResult": "Expected outcome",
-      "preconditions": ["Precondition 1"],
-      "postconditions": ["Cleanup step 1"],
-      "automated": true
-    }
-  ],
-  "summary": {
-    "totalTests": 0,
-    "critical": 0,
-    "high": 0,
-    "medium": 0,
-    "low": 0,
-    "automated": 0,
-    "manual": 0
-  }
-}`;
-
+    const systemPrompt = `You are a test automation expert. Generate a comprehensive test package...`;
+    
     const userPrompt = `Generate detailed test cases from these requirements:
-${JSON.stringify(contentToUse, null, 2)}
-
-Create specific, actionable test cases that cover all critical functionality.`;
+${JSON.stringify(contentToUse, null, 2)}`;
 
     const result = await generateText({
       model: openai('gpt-3.5-turbo'),
@@ -95,7 +64,6 @@ Create specific, actionable test cases that cover all critical functionality.`;
       temperature: 0.3,
     });
     
-    // Parse the response
     let testPackage;
     try {
       const text = result.text;
@@ -103,17 +71,12 @@ Create specific, actionable test cases that cover all critical functionality.`;
       if (jsonMatch) {
         testPackage = JSON.parse(jsonMatch[0]);
       } else {
-        testPackage = { testCases: [], summary: { totalTests: 0, automated: 0, manual: 0 } };
+        testPackage = { testCases: [], summary: { totalTests: 0 } };
       }
     } catch (e) {
-      testPackage = { 
-        testCases: [], 
-        raw: result.text,
-        summary: { totalTests: 0, automated: 0, manual: 0 } 
-      };
+      testPackage = { testCases: [], summary: { totalTests: 0 } };
     }
     
-    // Save to database
     const packageName = name || `Test Package ${new Date().toLocaleString()}`;
     
     const { data, error } = await supabase
@@ -124,8 +87,7 @@ Create specific, actionable test cases that cover all critical functionality.`;
         name: packageName,
         description: `Generated from ${atrdId ? 'ATRD' : 'manual input'}`,
         test_cases: testPackage,
-        status: 'draft',
-        created_at: new Date().toISOString()
+        status: 'draft'
       })
       .select()
       .single();
