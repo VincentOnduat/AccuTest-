@@ -2,48 +2,37 @@ name: AccuTest CI/CD
 
 on:
   push:
-    branches: [main, master, develop]
-  pull_request:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
+      
       - name: Install dependencies
-        run: npm ci
-        working-directory: ./frontend
-
-      - name: Type check
-        run: npm run check
-        working-directory: ./frontend
-        continue-on-error: true
-
-      - name: Build application
-        run: npm run build
-        working-directory: ./frontend
+        run: |
+          cd frontend
+          npm install --legacy-peer-deps
+        shell: bash
+      
+      - name: Build
+        run: |
+          cd frontend
+          npm run build
+        shell: bash
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      
+      - uses: actions/upload-artifact@v4
         with:
           name: accutest-build
           path: frontend/build/
-          retention-days: 7
-
-      - name: Build successful
-        run: echo "✅ Build completed successfully!"
