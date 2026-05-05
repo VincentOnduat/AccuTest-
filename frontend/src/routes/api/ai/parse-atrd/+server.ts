@@ -1,26 +1,51 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { streamText } from 'ai';
-import { OPENAI_API_KEY } from '$env/static/private';
 import { json } from '@sveltejs/kit';
 import { createServerClient } from '@supabase/ssr';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
 
-const openai = createOpenAI({ apiKey: OPENAI_API_KEY });
-
 export async function POST({ request, cookies }) {
   try {
+    // Dynamic import of private env - only runs at runtime
+    let OPENAI_API_KEY;
+    try {
+      const env = await import('$env/static/private');
+      OPENAI_API_KEY = (env as any).OPENAI_API_KEY;
+    } catch (error) {
+      console.error('Failed to load OpenAI API key:', error);
+      return json({ 
+        error: 'OpenAI API key not configured',
+        message: 'Please add OPENAI_API_KEY to your environment variables'
+      }, { status: 503 });
+    }
+
+    if (!OPENAI_API_KEY || OPENAI_API_KEY === '') {
+      return json({ 
+        error: 'OpenAI API key not configured',
+        message: 'Please add OPENAI_API_KEY to your environment variables'
+      }, { status: 503 });
+    }
+
     const supabase = createServerClient(
       PUBLIC_SUPABASE_URL,
       PUBLIC_SUPABASE_ANON_KEY,
-      { cookies: { get: (key) => cookies.get(key) } }
+      { 
+        cookies: { 
+          get: (key) => cookies.get(key),
+          set: (key, value, options) => cookies.set(key, value, options),
+          remove: (key, options) => cookies.delete(key, options)
+        } 
+      }
     );
-     
+    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
     
     const { document, detectedDomain, systemUrls, environments } = await request.json();
+    
+    const openai = createOpenAI({ apiKey: OPENAI_API_KEY });
     
     const systemPrompt = `You are an expert test automation architect and business analyst. Parse the provided Automation Test Requirement Document (ATRD) and extract structured information.
 
