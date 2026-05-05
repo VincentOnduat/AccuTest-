@@ -1,14 +1,20 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
-import { OPENAI_API_KEY } from '$env/static/private';
 import { json } from '@sveltejs/kit';
 import { createServerClient } from '@supabase/ssr';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
-
-const openai = createOpenAI({ apiKey: OPENAI_API_KEY });
+import { hasOpenAI, getOpenAIConfig } from '$lib/openai';
 
 export async function POST({ request, cookies }) {
   try {
+    // Check if OpenAI is available FIRST
+    if (!hasOpenAI) {
+      return json({ 
+        error: 'OpenAI API key not configured. Please add OPENAI_API_KEY to your environment variables.',
+        solution: 'Add OPENAI_API_KEY to your .env file or GitHub secrets'
+      }, { status: 503 });
+    }
+
     const supabase = createServerClient(
       PUBLIC_SUPABASE_URL,
       PUBLIC_SUPABASE_ANON_KEY,
@@ -44,6 +50,9 @@ export async function POST({ request, cookies }) {
         // Keep as string if not JSON
       }
     }
+    
+    // Create OpenAI client with the API key
+    const openai = createOpenAI({ apiKey: getOpenAIConfig().apiKey });
     
     const systemPrompt = `You are a test automation expert. Generate a comprehensive test package from the provided requirements.
 
