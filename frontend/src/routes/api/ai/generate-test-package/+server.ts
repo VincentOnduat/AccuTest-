@@ -3,19 +3,29 @@ import { generateText } from 'ai';
 import { json } from '@sveltejs/kit';
 import { createServerClient } from '@supabase/ssr';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
-import { hasOpenAI, getOpenAIConfig } from '$lib/server/openai';  // Import from server only
 
 export async function POST({ request, cookies }) {
   try {
-    // Check if OpenAI is available
-    if (!hasOpenAI) {
+    // Dynamic import of private env - only runs at runtime, not build time
+    let OPENAI_API_KEY;
+    try {
+      const env = await import('$env/static/private');
+      OPENAI_API_KEY = (env as any).OPENAI_API_KEY;
+    } catch (error) {
+      console.error('Failed to load OpenAI API key:', error);
       return json({ 
         error: 'OpenAI API key not configured',
         message: 'Please add OPENAI_API_KEY to your environment variables'
       }, { status: 503 });
     }
 
-    // Rest of your code...
+    if (!OPENAI_API_KEY || OPENAI_API_KEY === '') {
+      return json({ 
+        error: 'OpenAI API key not configured',
+        message: 'Please add OPENAI_API_KEY to your environment variables'
+      }, { status: 503 });
+    }
+
     const supabase = createServerClient(
       PUBLIC_SUPABASE_URL,
       PUBLIC_SUPABASE_ANON_KEY,
@@ -50,12 +60,36 @@ export async function POST({ request, cookies }) {
       }
     }
     
-    const openai = createOpenAI({ apiKey: getOpenAIConfig().apiKey });
+    const openai = createOpenAI({ apiKey: OPENAI_API_KEY });
     
-    const systemPrompt = `You are a test automation expert. Generate a comprehensive test package...`;
-    
+    const systemPrompt = `You are a test automation expert. Generate a comprehensive test package from the provided requirements.
+
+Return ONLY valid JSON with this exact structure:
+{
+  "testCases": [
+    {
+      "id": "TC001",
+      "name": "Test case name",
+      "description": "What this test verifies",
+      "priority": "Critical",
+      "type": "API",
+      "steps": ["Step 1", "Step 2"],
+      "expectedResult": "Expected outcome"
+    }
+  ],
+  "summary": {
+    "totalTests": 0,
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  }
+}`;
+
     const userPrompt = `Generate detailed test cases from these requirements:
-${JSON.stringify(contentToUse, null, 2)}`;
+${JSON.stringify(contentToUse, null, 2)}
+
+Create specific, actionable test cases that cover all critical functionality.`;
 
     const result = await generateText({
       model: openai('gpt-3.5-turbo'),
