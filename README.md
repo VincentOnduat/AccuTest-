@@ -2,7 +2,7 @@
 
 ## AI-Powered Precision Test Automation
 
-<!-- BADGES - Replace 'YourUsername' with your GitHub username -->
+<!-- BADGES -->
 <p align="center">
   <a href="https://github.com/VincentOnduat/AccuTest/actions/workflows/main.yml">
     <img src="https://github.com/VincentOnduat/AccuTest/actions/workflows/main.yml/badge.svg" alt="CI/CD">
@@ -19,43 +19,71 @@
   <a href="https://supabase.com/">
     <img src="https://img.shields.io/badge/Supabase-3ECF8E.svg?logo=supabase" alt="Supabase">
   </a>
+  <a href="https://fastapi.tiangolo.com/">
+    <img src="https://img.shields.io/badge/FastAPI-0.104-009688.svg?logo=fastapi" alt="FastAPI">
+  </a>
 </p>
+
 ## 📋 Table of Contents
 
 - [About](#-about)
 - [Features](#-features)
+- [Tech Stack](#-tech-stack)
+- [Project Structure](#-project-structure)
 - [Quick Start](#-quick-start)
 - [API Endpoints](#-api-endpoints)
+- [Database Schema](#-database-schema)
 - [License](#-license)
 
 ## 🎯 About
 
-**AccuTest** transforms your test requirements into actionable test cases with surgical precision. Leveraging OpenAI's GPT models, it parses Automation Test Requirement Documents (ATRDs) and generates comprehensive test suites, tracks execution metrics, and provides deep analytics.
+**AccuTest** is a comprehensive test automation platform that transforms requirements into actionable test cases with surgical precision. Leveraging OpenAI's GPT models, it parses Automation Test Requirement Documents (ATRDs), generates executable test code, tracks execution metrics, and provides deep analytics with business insights.
 
 ## ✨ Features
 
-| Feature | Status |
-|---------|--------|
-| 🤖 AI Test Generation | ✅ |
-| 📋 ATRD Management | ✅ |
-| 📊 Analytics Dashboard | ✅ |
-| 🧪 Test Execution | ✅ |
-| 📈 HTML/JSON Reports | ✅ |
-| 🔔 Notifications | ✅ |
-| 🚀 CI/CD Integration | ✅ |
+### ✅ Working Features
 
-## 🚀 Quick Start
+| Feature | Status | Description |
+|---------|--------|-------------|
+| 🔐 User Authentication | ✅ | Supabase auth with email/password |
+| 📋 ATRD Management | ✅ | Create, view, parse, and delete ATRD documents |
+| 🤖 AI Test Generation | ✅ | Generate tests for 6 domains (Functional, Performance, Security, Accessibility, Visual, Data/ETL) |
+| 🧪 Test Packages | ✅ | Create and manage test packages with automated code |
+| 📊 Dashboard Analytics | ✅ | Real-time stats, recent sessions, tasks, and packages |
+| 🔄 Test Sessions | ✅ | Create and manage test execution sessions |
+| ✅ Task Management | ✅ | Create and track tasks with priority levels |
+| 👤 User Profile | ✅ | Manage user profile and account settings |
+| 🎯 Domain Categories | ✅ | 6 test categories with visual indicators |
+| 💾 ATRD Database | ✅ | Persistent storage with Supabase (6+ records working) |
 
-```bash
-# Clone the repository
-git clone https://github.com/VincentOnduat/AccuTest-.git
-cd AccuTest/frontend
+### 🚧 In Development
 
-# Install dependencies
-npm install
+| Feature | Status | Description |
+|---------|--------|-------------|
+| 🧪 Test Execution | 🚧 | Running actual test suites |
+| 📈 Business Reports | 🚧 | Advanced analytics and reporting |
+| 🔔 Notifications | 🚧 | Email and webhook notifications |
+| 🚀 CI/CD Pipeline | 🚧 | Automated testing and deployment |
 
-# Set up environment variables
-cp .env.example .env
+## 🛠️ Tech Stack
 
-# Run development server
-npm run dev
+### Frontend
+- **Framework**: SvelteKit 2.0
+- **Language**: TypeScript 5.0
+- **Styling**: CSS with Svelte scoped styles
+- **State Management**: Svelte stores
+- **API Client**: Supabase JS SDK
+
+### Backend
+- **API Framework**: FastAPI (Python 3.14)
+- **Database**: Supabase PostgreSQL
+- **Auth**: Supabase Auth (JWT)
+- **AI Integration**: OpenAI GPT Models
+- **Test Frameworks**: Playwright, Cypress, Jest, k6
+
+### Infrastructure
+- **Hosting**: Vercel / Supabase
+- **Version Control**: Git / GitHub
+- **CI/CD**: GitHub Actions
+
+## 📁 Project Structure
