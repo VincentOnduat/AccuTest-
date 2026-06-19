@@ -6,7 +6,7 @@ import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/publi
 
 export async function POST({ request, cookies }) {
   try {
-    // Dynamic import of private env - only runs at runtime, not build time
+    // Dynamic import of private env - only runs at runtime
     let OPENAI_API_KEY;
     try {
       const env = await import('$env/static/private');
@@ -44,19 +44,24 @@ export async function POST({ request, cookies }) {
     }
     
     const body = await request.json();
-    const { atrdContent, requirements, name, atrdId, document } = body;
+    const { atrdContent, requirements, name, atrdId, document, prompt } = body;
     
-    let contentToUse = atrdContent || requirements || document;
+    // Handle different input formats - now includes 'prompt'
+    let contentToUse = atrdContent || requirements || document || prompt;
     
     if (!contentToUse) {
-      return json({ error: 'Missing requirements, ATRD content, or document' }, { status: 400 });
+      return json({ 
+        error: 'Missing requirements, ATRD content, document, or prompt',
+        received: { atrdContent: !!atrdContent, requirements: !!requirements, document: !!document, prompt: !!prompt }
+      }, { status: 400 });
     }
     
+    // If contentToUse is a string, try to parse it as JSON
     if (typeof contentToUse === 'string') {
       try {
         contentToUse = JSON.parse(contentToUse);
       } catch (e) {
-        // Keep as string
+        // Keep as string if not JSON
       }
     }
     
