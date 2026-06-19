@@ -1,0 +1,200 @@
+﻿================================================================================
+PROJECT STRUCTURE DIAGNOSTIC REPORT
+Generated: 2026-06-08 22:40:55
+Project Path: C:\Users\Vincent\Aether_automate\frontend
+================================================================================
+
+
+📁 ROOT DIRECTORY STRUCTURE
+------------------------------------------------------------
+   📂 .vscode/
+   📂 migrations/
+   📂 src/
+   📂 static/
+   📄 .env (498 bytes)
+   📄 eslint.config.js (1.23 KB)
+   📄 package-lock.json (115.79 KB)
+   📄 package.json (1.25 KB)
+   📄 README.md (972 bytes)
+   📄 svelte.config.js (280 bytes)
+   📄 tsconfig.json (692 bytes)
+   📄 vite.config.js (278 bytes)
+   📄 vite.config.ts (144 bytes)
+
+📦 PACKAGE.JSON ANALYSIS
+------------------------------------------------------------
+   Name: frontend
+   Version: 0.0.1
+   Scripts:
+      • dev: vite dev
+      • build: vite build
+      • preview: vite preview
+      • prepare: svelte-kit sync || echo ''
+      • check: svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
+      • check:watch: svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch
+      • lint: prettier --check . && eslint .
+      • format: prettier --write .
+   Dependencies:
+      • @ai-sdk/openai: ^3.0.41
+      • @ai-sdk/svelte: ^4.0.116
+      • @supabase/ssr: ^0.9.0
+      • @supabase/supabase-js: ^2.98.0
+      • ai: ^6.0.116
+      • dotenv: ^17.3.1
+      • openai: ^6.27.0
+      • zod: ^4.3.6
+
+🔧 ENVIRONMENT CONFIGURATION
+------------------------------------------------------------
+   ✅ .env found
+      PUBLIC_SUPABASE_URL=***HIDDEN***
+      PUBLIC_SUPABASE_ANON_KEY=***KEY-HIDDEN***
+      OPENAI_API_KEY=***KEY-HIDDEN***
+      NODE_ENV=***HIDDEN***
+   ❌ .env.local not found
+   ❌ .env.development not found
+   ❌ .env.production not found
+
+📝 SOURCE CODE STRUCTURE (src/)
+------------------------------------------------------------
+
+🌐 API ROUTES DETAILS
+------------------------------------------------------------
+   📡 src\routes\api\ai\debug\+server.ts (22 lines)
+      ⚠️  No authentication logic found
+   📡 src\routes\api\ai\generate-test-package\+server.ts (551 lines)
+      ✅ Has authentication logic
+   📡 src\routes\api\ai\parse-atrd\+server.ts (182 lines)
+      ✅ Has authentication logic
+   📡 src\routes\api\ai\test\+server.ts (27 lines)
+      ⚠️  No authentication logic found
+   📡 src\routes\api\atrd\list\+server.ts (29 lines)
+      ✅ Has authentication logic
+   📡 src\routes\api\atrd\parse\+server.ts (96 lines)
+      ⚠️  No authentication logic found
+   📡 src\routes\api\atrd\save\+server.ts (0 lines)
+      ⚠️  No authentication logic found
+   📡 src\routes\api\auth\set-cookie\+server.ts (42 lines)
+      ⚠️  No authentication logic found
+   📡 src\routes\api\health\+server.ts (64 lines)
+      ✅ Has authentication logic
+   📡 src\routes\api\notifications\+server.ts (80 lines)
+      ✅ Has authentication logic
+   📡 src\routes\api\packages\id\+server.ts (46 lines)
+      ✅ Has authentication logic
+   📡 src\routes\api\packages\+server.ts (47 lines)
+      ✅ Has authentication logic
+   📡 src\routes\api\reports\generate\+server.ts (188 lines)
+      ✅ Has authentication logic
+   📡 src\routes\api\test-executions\[id]\+server.ts (0 lines)
+      ✅ Has authentication logic
+   📡 src\routes\api\test-executions\+server.ts (42 lines)
+      ✅ Has authentication logic
+   📡 src\routes\api\test-runner\+server.ts (106 lines)
+      ✅ Has authentication logic
+
+📄 DASHBOARD & PAGE FILES
+------------------------------------------------------------
+   📄 src\routes\dashboard\analytics\+page.svelte (441 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\atrd\[id]\+page.svelte (0 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\atrd\+page.svelte (47 lines)
+      🔄 fetch() calls: 3
+      🔐 authFetch() calls: 3
+      ⚠️  Unauthenticated API call: /api/atrd/list
+   📄 src\routes\dashboard\business-tests\+page.svelte (35 lines)
+      🔄 fetch() calls: 2
+      🔐 authFetch() calls: 2
+      ⚠️  Unauthenticated API call: /api/atrd/list
+   📄 src\routes\dashboard\packages\id\+page.svelte (107 lines)
+      🔄 fetch() calls: 2
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\packages\[id]\+page.svelte (0 lines)
+      🔄 fetch() calls: 2
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\packages\+page.svelte (84 lines)
+      🔄 fetch() calls: 1
+      🔐 authFetch() calls: 0
+      ⚠️  Unauthenticated API call: /api/packages
+   📄 src\routes\dashboard\profile\+page.svelte (555 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\sessions\new\+page.svelte (243 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\sessions\[id]\+page.svelte (0 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\sessions\+page.svelte (249 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\settings\+page.svelte (302 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\tasks\new\+page.svelte (176 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\tasks\+page.svelte (385 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\test-execution\+page.svelte (165 lines)
+      🔄 fetch() calls: 1
+      🔐 authFetch() calls: 0
+      ⚠️  Unauthenticated API call: /api/test-executions
+   📄 src\routes\dashboard\tests\new\+page.svelte (196 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\tests\[id]\+page.svelte (0 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\tests\+page.svelte (195 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\+layout.svelte (612 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\dashboard\+page.svelte (570 lines)
+      🔄 fetch() calls: 2
+      🔐 authFetch() calls: 5
+   📄 src\routes\+layout.svelte (18 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+   📄 src\routes\+page.svelte (67 lines)
+      🔄 fetch() calls: 0
+      🔐 authFetch() calls: 0
+
+🔄 SUPABASE RELATED FILES
+------------------------------------------------------------
+   🔑 src\hooks.server.ts (27 lines)
+   🔑 src\lib\supabase.ts (23 lines)
+   🔑 src\lib\components\BusinessReportView.svelte (374 lines)
+   🔑 src\lib\components\DynamicATRDParser.svelte (233 lines)
+   🔑 src\lib\components\IntegratedTestGenerator.svelte (629 lines)
+   🔑 src\lib\components\TestCategoriesDashboard.svelte (200 lines)
+   🔑 src\lib\server\auth.ts (47 lines)
+   🔑 src\routes\+layout.svelte (18 lines)
+   🔑 src\routes\+page.svelte (67 lines)
+   🔑 src\routes\api\ai\debug\+server.ts (22 lines)
+   🔑 src\routes\api\reports\generate\.github\workflows\test-automation.yml (51 lines)
+
+⚠️  POTENTIAL ISSUES DETECTED
+------------------------------------------------------------
+   ❌ Line ~207: Direct fetch to /api/atrd/save without auth (should use authFetch)
+   ❌ +server.ts: No authentication verification
+   ❌ +server.ts: No authentication verification
+   ❌ +server.ts: No authentication verification
+   ❌ +server.ts: No authentication verification
+
+📊 PROJECT STATISTICS
+------------------------------------------------------------
+   Total Source Files: 52
+   Svelte Files: 26
+   TypeScript Files: 23
+   JavaScript Files: 0
+   Total Lines of Code: 7631
+
+💡 RECOMMENDATIONS
+------------------------------------------------------------

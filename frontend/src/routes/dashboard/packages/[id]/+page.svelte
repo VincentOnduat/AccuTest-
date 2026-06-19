@@ -3,460 +3,219 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-
+  
   let pkg: any = null;
   let loading = true;
   let error = '';
-  let activeTab = 'automated';
-
-  const packageId = $page.params.id;
-
+  let activeTab = 'code';
+  
+  $: id = $page.params.id;
+  
   onMount(async () => {
-    await fetchPackage();
+    await loadPackage();
   });
-
-  async function fetchPackage() {
+  
+  async function loadPackage() {
+    loading = true;
+    error = '';
+    
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        goto('/');
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      if (!token) {
+        error = 'Not authenticated';
+        loading = false;
         return;
       }
-
-      const { data, error: fetchError } = await supabase
-        .from('test_packages')
-        .select('*')
-        .eq('id', packageId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (fetchError) throw fetchError;
       
-      pkg = data;
-    } catch (err: any) {
-      error = err.message;
+      const response = await fetch(`/api/packages/id/${id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        pkg = result.data || result;
+        console.log('Package loaded:', pkg);
+      } else if (response.status === 404) {
+        error = 'Package not found';
+      } else {
+        error = 'Failed to load package';
+      }
+    } catch (err) {
+      console.error('Error loading package:', err);
+      error = err instanceof Error ? err.message : String(err);
     } finally {
       loading = false;
     }
   }
-
+  
   async function deletePackage() {
-    if (confirm('Are you sure you want to delete this package?')) {
-      try {
-        const { error: deleteError } = await supabase
-          .from('test_packages')
-          .delete()
-          .eq('id', packageId);
-
-        if (deleteError) throw deleteError;
-        
+    if (!confirm('Delete this test package?')) return;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      const response = await fetch(`/api/packages/id/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
         goto('/dashboard/packages');
-      } catch (err: any) {
-        error = err.message;
+      } else {
+        alert('Failed to delete');
       }
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('Error deleting');
     }
   }
-
+  
   function copyToClipboard(text: string) {
     navigator.clipboard.writeText(text);
-    // Could add toast notification here
+    alert('Copied to clipboard!');
+  }
+  
+  function getPriorityColor(priority: string) {
+    switch(priority?.toLowerCase()) {
+      case 'critical': return '#dc2626';
+      case 'high': return '#f97316';
+      case 'medium': return '#eab308';
+      default: return '#10b981';
+    }
   }
 </script>
 
-<svelte:head>
-  <title>{pkg?.name || 'Package'} - Aether Automate</title>
-</svelte:head>
-
-<div class="container">
-  <button class="back-btn" on:click={() => goto('/dashboard/packages')}>
-    ← Back to Packages
-  </button>
-
+<div style="max-width: 1200px; margin: 0 auto; padding: 2rem;">
   {#if loading}
-    <div class="loading">Loading package...</div>
+    <div style="text-align: center; padding: 3rem;">Loading package...</div>
   {:else if error}
-    <div class="error">Error: {error}</div>
+    <div style="text-align: center; padding: 3rem; color: #dc2626;">
+      <p>Error: {error}</p>
+      <button on:click={() => goto('/dashboard/packages')} style="margin-top: 1rem; padding: 0.5rem 1rem; background: #667eea; color: white; border: none; border-radius: 0.375rem; cursor: pointer;">
+        Back to Packages
+      </button>
+    </div>
   {:else if pkg}
-    <div class="package-header">
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
       <div>
-        <h1>{pkg.name}</h1>
-        <p class="package-meta">
-          Created {new Date(pkg.created_at).toLocaleString()} • 
-          Version {pkg.version || 1} • 
-          {pkg.automated_test_count || 0} automated tests • 
-          {pkg.manual_test_count || 0} manual tests
+        <button on:click={() => goto('/dashboard/packages')} style="background: none; border: none; color: #667eea; cursor: pointer; margin-bottom: 0.5rem;">
+          ← Back to Packages
+        </button>
+        <h1 style="margin: 0; font-size: 1.5rem;">{pkg.name}</h1>
+        <p style="color: #6b7280; margin-top: 0.25rem;">
+          Created: {new Date(pkg.created_at).toLocaleString()}
         </p>
       </div>
-      <button class="delete-btn" on:click={deletePackage}>Delete Package</button>
-    </div>
-
-    <div class="tabs">
-      <button 
-        class="tab-btn" 
-        class:active={activeTab === 'automated'}
-        on:click={() => activeTab = 'automated'}
-      >
-        🤖 Automated Tests
-      </button>
-      <button 
-        class="tab-btn" 
-        class:active={activeTab === 'manual'}
-        on:click={() => activeTab = 'manual'}
-      >
-        📝 Manual Tests
-      </button>
-      <button 
-        class="tab-btn" 
-        class:active={activeTab === 'business'}
-        on:click={() => activeTab = 'business'}
-      >
-        📊 Business Report
-      </button>
-      <button 
-        class="tab-btn" 
-        class:active={activeTab === 'data'}
-        on:click={() => activeTab = 'data'}
-      >
-        📁 Test Data
+      <button on:click={deletePackage} style="padding: 0.5rem 1rem; background: #ef4444; color: white; border: none; border-radius: 0.375rem; cursor: pointer;">
+        Delete Package
       </button>
     </div>
-
-    <div class="tab-content">
-      {#if activeTab === 'automated'}
-        <div class="automated-section">
-          <div class="code-header">
-            <h3>Test Code ({pkg.package_data?.automated?.framework})</h3>
-            <button class="copy-btn" on:click={() => copyToClipboard(pkg.package_data?.automated?.code)}>
-              Copy Code
-            </button>
-          </div>
-          <pre class="code-block"><code>{pkg.package_data?.automated?.code || '// No code available'}</code></pre>
-          
-          {#if pkg.package_data?.automated?.dependencies?.length > 0}
-            <h4>Dependencies</h4>
-            <pre class="dependencies">{pkg.package_data.automated.dependencies.join('\n')}</pre>
-          {/if}
+    
+    <!-- Tabs -->
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 2rem; border-bottom: 1px solid #e5e7eb;">
+      <button on:click={() => activeTab = 'code'} style="padding: 0.75rem 1.5rem; border-bottom: 2px solid {activeTab === 'code' ? '#667eea' : 'transparent'}; color: {activeTab === 'code' ? '#667eea' : '#6b7280'}; background: none; border: none; cursor: pointer;">
+        📝 Test Code
+      </button>
+      <button on:click={() => activeTab = 'cases'} style="padding: 0.75rem 1.5rem; border-bottom: 2px solid {activeTab === 'cases' ? '#667eea' : 'transparent'}; color: {activeTab === 'cases' ? '#667eea' : '#6b7280'}; background: none; border: none; cursor: pointer;">
+        🧪 Test Cases
+      </button>
+      <button on:click={() => activeTab = 'summary'} style="padding: 0.75rem 1.5rem; border-bottom: 2px solid {activeTab === 'summary' ? '#667eea' : 'transparent'}; color: {activeTab === 'summary' ? '#667eea' : '#6b7280'}; background: none; border: none; cursor: pointer;">
+        📊 Summary
+      </button>
+    </div>
+    
+    <!-- Tab Content -->
+    {#if activeTab === 'code'}
+      <div style="background: #1e1e1e; border-radius: 0.5rem; padding: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; color: #e5e7eb;">
+          <span>Executable Test Code ({pkg.test_cases?.framework || 'playwright'})</span>
+          <button on:click={() => copyToClipboard(pkg.test_cases?.executableCode || pkg.test_cases?.code || '')} style="padding: 0.25rem 0.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 0.25rem; color: white; cursor: pointer;">
+            📋 Copy
+          </button>
         </div>
-      {/if}
-
-      {#if activeTab === 'manual'}
-        <div class="manual-section">
-          {#if pkg.package_data?.manual?.testCases?.length > 0}
-            {#each pkg.package_data.manual.testCases as testCase}
-              <div class="test-case">
-                <h4>{testCase.id}: {testCase.title}</h4>
-                <p class="priority-{testCase.priority?.toLowerCase()}">Priority: {testCase.priority}</p>
-                <p>{testCase.description}</p>
-                
-                {#if testCase.preconditions?.length > 0}
-                  <h5>Preconditions:</h5>
-                  <ul>
-                    {#each testCase.preconditions as pre}
-                      <li>{pre}</li>
-                    {/each}
-                  </ul>
-                {/if}
-
-                <h5>Test Steps:</h5>
-                <table class="steps-table">
-                  <thead>
-                    <tr>
-                      <th>Step</th>
-                      <th>Action</th>
-                      <th>Expected Result</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each testCase.steps as step}
-                      <tr>
-                        <td>{step.step}</td>
-                        <td>{step.action}</td>
-                        <td>{step.expectedResult}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
+        <pre style="background: #0d1117; color: #e6edf3; padding: 1rem; border-radius: 0.375rem; overflow-x: auto; font-size: 0.75rem; font-family: 'Monaco', monospace; margin: 0; white-space: pre-wrap;">
+          <code>{(pkg.test_cases?.executableCode || pkg.test_cases?.code || '// No executable code found')}</code>
+        </pre>
+      </div>
+    {/if}
+    
+    {#if activeTab === 'cases'}
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
+        {#if pkg.test_cases?.testCases?.length > 0}
+          {#each pkg.test_cases.testCases as test, index}
+            <div style="background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                <div>
+                  <span style="font-weight: 600; font-size: 1rem;">{index + 1}. {test.name || 'Test Case'}</span>
+                  <span style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; background: {getPriorityColor(test.priority)}; color: white; border-radius: 0.25rem; font-size: 0.7rem; font-weight: 500;">
+                    {test.priority || 'Medium'}
+                  </span>
+                </div>
               </div>
-            {/each}
-          {:else}
-            <p>No manual test cases in this package</p>
-          {/if}
-        </div>
-      {/if}
-
-      {#if activeTab === 'business'}
-        <div class="business-section">
-          <h3>Executive Summary</h3>
-          <p>{pkg.package_data?.business?.executiveSummary}</p>
-          
-          <h4>Key Metrics</h4>
-          <div class="metrics-grid">
-            {#each Object.entries(pkg.package_data?.business?.keyMetrics || {}) as [key, value]}
-              <div class="metric">
-                <span class="metric-label">{key}</span>
-                <span class="metric-value">{value}</span>
-              </div>
-            {/each}
-          </div>
-
-          <h4>Business Value</h4>
-          <ul>
-            {#each pkg.package_data?.business?.businessValue || [] as value}
-              <li>{value}</li>
-            {/each}
-          </ul>
-
-          <h4>Risks</h4>
-          {#each pkg.package_data?.business?.risks || [] as risk}
-            <div class="risk-item">
-              <strong>{risk.risk}</strong>
-              <span class="risk-impact {risk.impact?.toLowerCase()}">{risk.impact}</span>
-              <p>{risk.mitigation}</p>
+              
+              <p style="color: #4b5563; margin-bottom: 1rem; font-size: 0.875rem;">{test.description || 'No description'}</p>
+              
+              {#if test.steps?.length > 0}
+                <div style="margin-bottom: 0.75rem;">
+                  <div style="font-weight: 500; font-size: 0.75rem; color: #374151; margin-bottom: 0.25rem;">Steps:</div>
+                  <ol style="margin: 0; padding-left: 1.25rem;">
+                    {#each test.steps as step}
+                      <li style="font-size: 0.875rem; color: #4b5563; margin-bottom: 0.25rem;">{step}</li>
+                    {/each}
+                  </ol>
+                </div>
+              {/if}
+              
+              {#if test.expectedResult}
+                <div>
+                  <div style="font-weight: 500; font-size: 0.75rem; color: #374151; margin-bottom: 0.25rem;">Expected Result:</div>
+                  <p style="margin: 0; font-size: 0.875rem; color: #10b981;">✓ {test.expectedResult}</p>
+                </div>
+              {/if}
             </div>
           {/each}
-        </div>
-      {/if}
-
-      {#if activeTab === 'data'}
-        <div class="data-section">
-          <h3>Test Data</h3>
-          <pre class="data-block">{JSON.stringify(pkg.package_data?.testData || {}, null, 2)}</pre>
-          
-          <h4>Documentation</h4>
-          <div class="docs">
-            <h5>Quick Start</h5>
-            <p>{pkg.package_data?.documentation?.quickStart}</p>
-            
-            <h5>Prerequisites</h5>
-            <ul>
-              {#each pkg.package_data?.documentation?.prerequisites || [] as prereq}
-                <li>{prereq}</li>
-              {/each}
-            </ul>
+        {:else}
+          <div style="text-align: center; padding: 3rem; background: #f9fafb; border-radius: 0.5rem; color: #6b7280;">
+            No test cases found in this package.
+          </div>
+        {/if}
+      </div>
+    {/if}
+    
+    {#if activeTab === 'summary'}
+      <div style="background: #f9fafb; border-radius: 0.5rem; padding: 1.5rem;">
+        <h3 style="margin: 0 0 1rem 0;">Package Summary</h3>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <div style="background: white; padding: 1rem; border-radius: 0.5rem; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700;">{pkg.test_cases?.testCases?.length || 0}</div>
+            <div style="color: #6b7280;">Total Test Cases</div>
+          </div>
+          <div style="background: white; padding: 1rem; border-radius: 0.5rem; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700; color: #dc2626;">{pkg.test_cases?.summary?.critical || 0}</div>
+            <div style="color: #6b7280;">Critical Priority</div>
+          </div>
+          <div style="background: white; padding: 1rem; border-radius: 0.5rem; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700; color: #f97316;">{pkg.test_cases?.summary?.high || 0}</div>
+            <div style="color: #6b7280;">High Priority</div>
+          </div>
+          <div style="background: white; padding: 1rem; border-radius: 0.5rem; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700;">{pkg.test_cases?.summary?.totalTests || 0}</div>
+            <div style="color: #6b7280;">Framework: {pkg.test_cases?.framework || 'N/A'}</div>
           </div>
         </div>
-      {/if}
-    </div>
+        
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+          <p><strong>Package ID:</strong> {pkg.id}</p>
+          <p><strong>Created:</strong> {new Date(pkg.created_at).toLocaleString()}</p>
+          <p><strong>Last Updated:</strong> {new Date(pkg.updated_at).toLocaleString()}</p>
+          <p><strong>Status:</strong> {pkg.status || 'draft'}</p>
+        </div>
+      </div>
+    {/if}
   {/if}
 </div>
-
-<style>
-  .container {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 2rem;
-  }
-
-  .back-btn {
-    background: none;
-    border: none;
-    color: #667eea;
-    cursor: pointer;
-    margin-bottom: 1rem;
-    font-size: 0.875rem;
-  }
-
-  .back-btn:hover {
-    text-decoration: underline;
-  }
-
-  .package-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-  }
-
-  h1 {
-    font-size: 2rem;
-    color: #1f2937;
-    margin: 0 0 0.5rem 0;
-  }
-
-  .package-meta {
-    color: #6b7280;
-    margin: 0;
-  }
-
-  .delete-btn {
-    padding: 0.5rem 1rem;
-    background: #ef4444;
-    color: white;
-    border: none;
-    border-radius: 0.375rem;
-    cursor: pointer;
-  }
-
-  .delete-btn:hover {
-    background: #dc2626;
-  }
-
-  .tabs {
-    display: flex;
-    gap: 0.5rem;
-    border-bottom: 1px solid #e5e7eb;
-    margin-bottom: 2rem;
-    overflow-x: auto;
-  }
-
-  .tab-btn {
-    padding: 0.5rem 1rem;
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    cursor: pointer;
-    color: #6b7280;
-    white-space: nowrap;
-  }
-
-  .tab-btn.active {
-    border-bottom-color: #667eea;
-    color: #667eea;
-    font-weight: 500;
-  }
-
-  .code-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-  }
-
-  .copy-btn {
-    padding: 0.5rem 1rem;
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-    cursor: pointer;
-  }
-
-  .copy-btn:hover {
-    background: #e5e7eb;
-  }
-
-  .code-block {
-    background: #1f2937;
-    color: #e5e7eb;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    overflow-x: auto;
-    font-size: 0.875rem;
-    white-space: pre-wrap;
-    margin-bottom: 2rem;
-  }
-
-  .dependencies {
-    background: #f3f4f6;
-    padding: 1rem;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-  }
-
-  .test-case {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.5rem;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .test-case h4 {
-    margin: 0 0 0.5rem 0;
-    color: #1f2937;
-  }
-
-  .priority-high { color: #dc2626; }
-  .priority-medium { color: #f59e0b; }
-  .priority-low { color: #10b981; }
-
-  .steps-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 1rem;
-  }
-
-  .steps-table th,
-  .steps-table td {
-    padding: 0.75rem;
-    text-align: left;
-    border: 1px solid #e5e7eb;
-  }
-
-  .steps-table th {
-    background: #f3f4f6;
-  }
-
-  .metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 1rem;
-    margin: 1rem 0;
-  }
-
-  .metric {
-    background: #f3f4f6;
-    padding: 1rem;
-    border-radius: 0.375rem;
-    text-align: center;
-  }
-
-  .metric-label {
-    display: block;
-    font-size: 0.75rem;
-    color: #6b7280;
-  }
-
-  .metric-value {
-    display: block;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #1f2937;
-  }
-
-  .risk-item {
-    padding: 1rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-    margin-bottom: 1rem;
-  }
-
-  .risk-impact {
-    display: inline-block;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    margin-left: 0.5rem;
-  }
-
-  .risk-impact.high {
-    background: #fee2e2;
-    color: #991b1b;
-  }
-
-  .risk-impact.medium {
-    background: #fed7aa;
-    color: #92400e;
-  }
-
-  .risk-impact.low {
-    background: #d1fae5;
-    color: #065f46;
-  }
-
-  .data-block {
-    background: #1f2937;
-    color: #e5e7eb;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    overflow-x: auto;
-    font-size: 0.875rem;
-    margin-bottom: 2rem;
-  }
-
-  .loading, .error {
-    text-align: center;
-    padding: 3rem;
-  }
-</style>

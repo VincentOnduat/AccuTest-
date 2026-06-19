@@ -2,10 +2,26 @@
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase';
 
-  export let userId: string;
+  export let userId: string = '';
+  export let initialDomain: 'functional' | 'performance' | 'security' | 'accessibility' | 'visual' | 'dataQuality' = 'functional';
+
+  type DomainKey = 'functional' | 'performance' | 'security' | 'accessibility' | 'visual' | 'dataQuality';
+  type Domain = {
+    value: DomainKey;
+    label: string;
+    icon: string;
+    description: string;
+    testTypes: {
+      value: string;
+      label: string;
+      icon: string;
+      defaultFramework: string;
+    }[];
+  };
 
   // State
   let testPrompt = '';
+  let testDomain: DomainKey = initialDomain;
   let testType = 'ui';
   let framework = 'playwright';
   let includeManualSteps = true;
@@ -16,141 +32,142 @@
   let activeTab = 'automated';
   let saveSuccess = false;
 
-  // Define types
-  interface Framework {
-    value: string;
-    label: string;
-    icon: string;
-  }
-
-  interface TestType {
-    value: string;
-    label: string;
-    icon: string;
-  }
-
-  interface PromptTemplate {
-    name: string;
-    prompt: string;
-    type: string;
-    framework: string;
-    icon: string;
-  }
-
-  // Frameworks and test types
-  const frameworks: Framework[] = [
-    { value: 'playwright', label: 'Playwright', icon: '🎭' },
-    { value: 'cypress', label: 'Cypress', icon: '🔄' },
-    { value: 'jest', label: 'Jest', icon: '🃏' },
-    { value: 'vitest', label: 'Vitest', icon: '⚡' }
-  ];
-
-  const testTypes: TestType[] = [
-    { value: 'ui', label: 'UI Automation', icon: '🖥️' },
-    { value: 'api', label: 'API Testing', icon: '🔌' },
-    { value: 'unit', label: 'Unit Test', icon: '🧪' },
-    { value: 'integration', label: 'Integration', icon: '🔄' }
-  ];
-
-  // Template prompts with icons
-  const promptTemplates: PromptTemplate[] = [
-    { 
-      name: 'Login Flow', 
-      prompt: 'Test user login with email/password, validation, and error handling',
-      type: 'ui',
-      framework: 'playwright',
-      icon: '🔐'
+  // Domain configurations
+  const domains: Domain[] = [
+    { value: 'functional', label: 'Functional Testing', icon: '🤖', description: 'Web, mobile, desktop, API, ERP automation',
+      testTypes: [
+        { value: 'ui', label: 'UI Automation', icon: '🖥️', defaultFramework: 'playwright' },
+        { value: 'api', label: 'API Testing', icon: '🔌', defaultFramework: 'jest' },
+        { value: 'unit', label: 'Unit Test', icon: '🧪', defaultFramework: 'vitest' },
+        { value: 'integration', label: 'Integration', icon: '🔄', defaultFramework: 'jest' }
+      ]
     },
-    { 
-      name: 'API CRUD', 
-      prompt: 'Test REST API endpoints for creating, reading, updating, and deleting users',
-      type: 'api',
-      framework: 'jest',
-      icon: '🔌'
+    { value: 'performance', label: 'Performance & Load', icon: '⚡', description: 'Load, stress, APM, SaaS labs',
+      testTypes: [
+        { value: 'load', label: 'Load Testing', icon: '📊', defaultFramework: 'k6' },
+        { value: 'stress', label: 'Stress Testing', icon: '💥', defaultFramework: 'k6' },
+        { value: 'apm', label: 'APM Monitoring', icon: '📈', defaultFramework: 'datadog' }
+      ]
     },
-    { 
-      name: 'Form Validation', 
-      prompt: 'Test registration form with email, password, and confirm password validation',
-      type: 'ui',
-      framework: 'playwright',
-      icon: '📝'
+    { value: 'security', label: 'Security / DevSecOps', icon: '🛡️', description: 'DAST, SAST, secrets, SBOM',
+      testTypes: [
+        { value: 'dast', label: 'DAST (Dynamic)', icon: '🎯', defaultFramework: 'owasp-zap' },
+        { value: 'sast', label: 'SAST (Static)', icon: '📝', defaultFramework: 'semgrep' },
+        { value: 'secrets', label: 'Secrets Scanning', icon: '🔑', defaultFramework: 'gitleaks' }
+      ]
     },
-    { 
-      name: 'Shopping Cart', 
-      prompt: 'Test adding items to cart, updating quantities, and checkout process',
-      type: 'ui',
-      framework: 'playwright',
-      icon: '🛒'
+    { value: 'accessibility', label: 'Accessibility Testing', icon: '♿', description: 'WCAG, screen readers, compliance',
+      testTypes: [
+        { value: 'wcag', label: 'WCAG Compliance', icon: '📋', defaultFramework: 'axe-core' },
+        { value: 'screenReader', label: 'Screen Reader', icon: '🔊', defaultFramework: 'nvda' },
+        { value: 'keyboard', label: 'Keyboard Navigation', icon: '⌨️', defaultFramework: 'playwright' }
+      ]
     },
-    { 
-      name: 'Payment Flow', 
-      prompt: 'Test payment processing with credit card, PayPal, and error scenarios',
-      type: 'integration',
-      framework: 'playwright',
-      icon: '💰'
+    { value: 'visual', label: 'Visual Testing', icon: '👁️', description: 'Visual diff, UI comparison, screenshots',
+      testTypes: [
+        { value: 'visualDiff', label: 'Visual Regression', icon: '🖼️', defaultFramework: 'percy' },
+        { value: 'uiComparison', label: 'UI Comparison', icon: '🔄', defaultFramework: 'chromatic' },
+        { value: 'screenshot', label: 'Screenshot Testing', icon: '📸', defaultFramework: 'playwright' }
+      ]
+    },
+    { value: 'dataQuality', label: 'Data/ETL Validation', icon: '📊', description: 'Data pipelines, data quality, migration',
+      testTypes: [
+        { value: 'etl', label: 'ETL Pipeline', icon: '🔄', defaultFramework: 'dbt' },
+        { value: 'dataQuality', label: 'Data Quality', icon: '✅', defaultFramework: 'great-expectations' },
+        { value: 'migration', label: 'Migration Testing', icon: '🚚', defaultFramework: 'dbt' }
+      ]
     }
   ];
 
-  // Improved helper function to extract JSON from text
-  function extractJSONFromText(text: string): any {
-    // Find the JSON object in the response
-    let jsonStr = text;
-    
-    // Try to extract JSON if there's extra text
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[0];
-    }
-    
-    // Clean up common JSON issues
-    jsonStr = jsonStr
-      // Remove trailing commas before closing braces
-      .replace(/,(\s*[}\]])/g, '$1')
-      // Fix unescaped backslashes in strings
-      .replace(/(?<!\\)\\(?!["\\/bfnrt]|u[0-9a-fA-F]{4})/g, '\\\\')
-      // Remove control characters
-      .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
-      // Fix newlines in strings
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r')
-      .replace(/\t/g, '\\t');
-    
-    try {
-      return JSON.parse(jsonStr);
-    } catch (e) {
-      console.error('JSON parse failed:', e);
-      
-      // Second attempt: Try to manually extract the code field
-      const codeMatch = text.match(/"code":\s*"([\s\S]*?)"(?=,\s*"|$)/);
-      if (codeMatch) {
-        try {
-          // Create a simple package with the extracted code
-          const frameworkMatch = text.match(/"framework":\s*"([^"]+)"/);
-          return {
-            automated: {
-              code: codeMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\'),
-              framework: frameworkMatch ? frameworkMatch[1] : 'playwright',
-              dependencies: ['@playwright/test'],
-              setup: 'npm install @playwright/test',
-              testCases: ['Generated test']
-            },
-            metadata: { 
-              name: `${testType.charAt(0).toUpperCase() + testType.slice(1)} Test`, 
-              description: testPrompt 
-            },
-            manual: { testSuite: { name: "Manual Tests", description: "" }, testCases: [] },
-            business: { executiveSummary: "", keyMetrics: {}, businessValue: [], risks: [] }
-          };
-        } catch (e2) {
-          console.error('Manual extraction also failed:', e2);
-        }
-      }
-      
-      return null;
+  // Frameworks by domain
+  const frameworksByDomain = {
+    functional: [
+      { value: 'playwright', label: 'Playwright', icon: '🎭' },
+      { value: 'cypress', label: 'Cypress', icon: '🔄' },
+      { value: 'jest', label: 'Jest', icon: '🃏' },
+      { value: 'vitest', label: 'Vitest', icon: '⚡' }
+    ],
+    performance: [
+      { value: 'k6', label: 'k6', icon: '📊' },
+      { value: 'jmeter', label: 'JMeter', icon: '⚡' },
+      { value: 'locust', label: 'Locust', icon: '🐍' }
+    ],
+    security: [
+      { value: 'owasp-zap', label: 'OWASP ZAP', icon: '🛡️' },
+      { value: 'semgrep', label: 'Semgrep', icon: '📝' },
+      { value: 'snyk', label: 'Snyk', icon: '🔒' },
+      { value: 'gitleaks', label: 'Gitleaks', icon: '🔑' }
+    ],
+    accessibility: [
+      { value: 'axe-core', label: 'Axe Core', icon: '♿' },
+      { value: 'playwright', label: 'Playwright', icon: '🎭' },
+      { value: 'lighthouse', label: 'Lighthouse', icon: '💡' }
+    ],
+    visual: [
+      { value: 'percy', label: 'Percy', icon: '👁️' },
+      { value: 'chromatic', label: 'Chromatic', icon: '🎨' },
+      { value: 'playwright', label: 'Playwright', icon: '🎭' }
+    ],
+    dataQuality: [
+      { value: 'dbt', label: 'dbt', icon: '📊' },
+      { value: 'great-expectations', label: 'Great Expectations', icon: '✅' },
+      { value: 'soda', label: 'Soda', icon: '🥤' }
+    ]
+  };
+
+  // Template prompts by domain
+  const templatesByDomain = {
+    functional: [
+      { name: 'Login Flow', prompt: 'Test user login with email/password, validation, and error handling', icon: '🔐' },
+      { name: 'API CRUD', prompt: 'Test REST API endpoints for creating, reading, updating, and deleting users', icon: '🔌' },
+      { name: 'Shopping Cart', prompt: 'Test adding items to cart, updating quantities, and checkout process', icon: '🛒' }
+    ],
+    performance: [
+      { name: 'Load Test', prompt: 'Load test with 1000 concurrent users accessing the homepage', icon: '📊' },
+      { name: 'Stress Test', prompt: 'Stress test to find breaking point of the checkout API', icon: '💥' },
+      { name: 'API Performance', prompt: 'Test API response times under peak loads (p95 < 200ms)', icon: '⚡' }
+    ],
+    security: [
+      { name: 'DAST Scan', prompt: 'Dynamic security scan for OWASP Top 10 vulnerabilities', icon: '🎯' },
+      { name: 'SAST Analysis', prompt: 'Static code security analysis for SQL injection and XSS', icon: '📝' },
+      { name: 'Secret Detection', prompt: 'Scan repository for hardcoded secrets and API keys', icon: '🔑' }
+    ],
+    accessibility: [
+      { name: 'WCAG Compliance', prompt: 'Test web application for WCAG 2.1 AA compliance', icon: '♿' },
+      { name: 'Screen Reader', prompt: 'Test compatibility with NVDA and VoiceOver screen readers', icon: '🔊' }
+    ],
+    visual: [
+      { name: 'Visual Regression', prompt: 'Capture and compare screenshots of key pages', icon: '👁️' },
+      { name: 'Responsive Design', prompt: 'Test UI responsiveness across desktop, tablet, and mobile', icon: '📱' }
+    ],
+    dataQuality: [
+      { name: 'ETL Validation', prompt: 'Validate ETL pipeline data transformation and row counts', icon: '🔄' },
+      { name: 'Data Quality', prompt: 'Test data quality rules: null checks, unique constraints', icon: '✅' }
+    ]
+  };
+
+  // Get current domain data
+  $: currentDomain = domains.find(d => d.value === testDomain) || domains[0];
+  $: currentTestTypes = currentDomain.testTypes;
+  $: currentFrameworks = frameworksByDomain[testDomain] || frameworksByDomain.functional;
+  $: currentTemplates = templatesByDomain[testDomain] || templatesByDomain.functional;
+
+  // Set defaults when domain changes
+  $: {
+    if (currentTestTypes.length > 0) {
+      testType = currentTestTypes[0].value;
+      framework = currentTestTypes[0].defaultFramework;
     }
   }
 
-  // Generate test package - simplified using cookies
+  // Watch for initialDomain changes from parent
+  $: {
+    if (initialDomain && initialDomain !== testDomain) {
+      console.log(`🔄 Generator updating domain from ${testDomain} to ${initialDomain}`);
+      testDomain = initialDomain;
+    }
+  }
+
   async function generatePackage() {
     if (!testPrompt.trim()) {
       error = 'Please describe what you want to test';
@@ -161,202 +178,137 @@
     error = '';
 
     try {
-      console.log('🔵 Generating test package...');
+      console.log(`🔵 Generating test package for domain: ${testDomain}`);
       
-      // Check session
       const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       
-      if (!session) {
-        console.error('❌ No active session');
-        error = 'Your session has expired. Please log in again.';
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 1500);
+      if (!token) {
+        error = 'Please refresh the page and try again';
         generating = false;
         return;
       }
 
-      console.log('✅ Session active for user:', session.user.email);
-
-      // Use cookies for auth - no Authorization header needed
       const response = await fetch('/api/ai/generate-test-package', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
-        credentials: 'include',
         body: JSON.stringify({
-          prompt: testPrompt,
-          testType,
-          framework,
-          includeManualSteps,
-          includeBusinessReport
+          document: testPrompt,
+          name: `${currentDomain.label} - ${new Date().toLocaleString()}`,
+          testDomain: testDomain,
+          testType: testType,
+          framework: framework,
+          userId
         })
       });
-
-      console.log('📡 API response status:', response.status);
-
-      if (response.status === 401) {
-        error = 'Your session has expired. Please log in again.';
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 1500);
-        return;
-      }
 
       if (!response.ok) {
         throw new Error(`Failed to generate test package (${response.status})`);
       }
 
-      // Handle streaming response
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let result = '';
+      const result = await response.json();
+      console.log('📦 API Response:', result);
 
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          result += decoder.decode(value, { stream: true });
-        }
-      }
-
-      console.log('📝 Raw response length:', result.length);
-      console.log('📝 Raw response preview:', result.substring(0, 500));
-
-      // Try to extract JSON using the improved function
-      const extractedData = extractJSONFromText(result);
-      
-      if (extractedData) {
-        generatedPackage = extractedData;
-        console.log('✅ Package parsed successfully');
+      // FIX: Check the actual response structure from your API
+      if (result.success) {
+        let testCases = [];
+        let executableCode = '';
         
-        // Ensure required fields exist
-        if (!generatedPackage.metadata) {
-          generatedPackage.metadata = {
-            name: `${testType.charAt(0).toUpperCase() + testType.slice(1)} Test`,
-            description: testPrompt,
-            testType: testType,
-            framework: framework
-          };
+        // The executable code is in result.testCode from your API
+        executableCode = result.testCode || '';
+        
+        // Try to extract test cases from various possible locations
+        if (result.data?.test_cases?.testCases) {
+          testCases = result.data.test_cases.testCases;
+        } else if (result.data?.testCases) {
+          testCases = result.data.testCases;
+        } else if (result.testCases) {
+          testCases = result.testCases;
         }
-        if (!generatedPackage.automated) {
-          generatedPackage.automated = {
-            code: result.substring(0, 2000),
-            framework: framework,
-            dependencies: [],
-            setup: `npm install ${framework}`,
-            testCases: [`Test: ${testPrompt.substring(0, 50)}`]
-          };
+        
+        // Also check if the API returned test cases in the testCode string (parse it)
+        if (testCases.length === 0 && executableCode) {
+          // Try to extract basic test info from the code
+          const codeLines = executableCode.split('\n');
+          for (const line of codeLines) {
+            if (line.includes('test(') || line.includes('it(')) {
+              const match = line.match(/['"`]([^'"`]+)['"`]/);
+              if (match) {
+                testCases.push({
+                  name: match[1],
+                  description: `Test: ${match[1]}`,
+                  priority: 'Medium'
+                });
+              }
+            }
+          }
         }
-      } else {
-        console.warn('No valid JSON found, creating fallback package');
-        // Create a fallback package with the raw text as code
+        
         generatedPackage = {
-          metadata: { 
-            name: `${testType.charAt(0).toUpperCase() + testType.slice(1)} Test`, 
+          metadata: {
+            name: result.data?.name || `${currentDomain.label} - ${new Date().toLocaleString()}`,
             description: testPrompt,
+            testDomain: testDomain,
             testType: testType,
-            framework: framework
+            framework: framework,
+            id: result.data?.id || result.id
           },
           automated: {
-            code: result.length > 100 ? result.substring(0, 2000) : `// AI generated test for: ${testPrompt}\n// Response received: ${result.substring(0, 500)}`,
+            executableCode: executableCode,
             framework: framework,
-            dependencies: framework === 'playwright' ? ['@playwright/test'] : framework === 'jest' ? ['jest'] : [],
-            setup: `npm install ${framework === 'playwright' ? '@playwright/test' : framework}`,
-            testCases: [`Test: ${testPrompt.substring(0, 50)}`]
+            testCases: testCases,
+            summary: result.summary || { totalTests: testCases.length }
           },
-          manual: {
-            testSuite: { name: `Manual: ${testPrompt}`, description: "Manual test steps" },
-            testCases: []
-          },
-          business: {
-            executiveSummary: `Test suite for: ${testPrompt}`,
-            keyMetrics: { coverage: "N/A" },
-            businessValue: ["Ensures quality"],
-            risks: []
-          }
+          manual: { testSuite: { name: `Manual: ${testPrompt}` }, testCases: [] },
+          business: { executiveSummary: `Test suite for ${currentDomain.label}`, keyMetrics: {}, businessValue: [], risks: [] }
         };
+      } else {
+        error = result.error || 'Failed to generate test package';
       }
-
     } catch (err: any) {
-      error = err.message || 'Failed to generate test package';
-      console.error('❌ Generation error:', err);
+      error = err.message;
+      console.error('Generation error:', err);
     } finally {
       generating = false;
     }
   }
 
-  // Save to library
-  async function saveToLibrary() {
-    if (!generatedPackage) return;
-
-    try {
-      const { error: saveError } = await supabase
-        .from('test_packages')
-        .insert([
-          {
-            user_id: userId,
-            name: generatedPackage?.metadata?.name || 'Untitled Package',
-            description: testPrompt,
-            version: 1,
-            automated_test_count: generatedPackage?.automated?.testCases?.length || 0,
-            manual_test_count: generatedPackage?.manual?.testCases?.length || 0,
-            package_data: generatedPackage
-          }
-        ]);
-
-      if (saveError) throw saveError;
-
-      saveSuccess = true;
-      setTimeout(() => saveSuccess = false, 3000);
-    } catch (err: any) {
-      error = err.message;
-    }
-  }
-
-  // Use template
-  function useTemplate(template: PromptTemplate) {
+  function useTemplate(template: any) {
     testPrompt = template.prompt;
-    testType = template.type;
-    framework = template.framework;
   }
 
-  // Reset form
   function resetForm() {
     testPrompt = '';
     generatedPackage = null;
     error = '';
   }
 
-  // Copy to clipboard
   function copyToClipboard(text: string) {
     navigator.clipboard.writeText(text);
   }
 </script>
 
-<!-- Rest of your template remains exactly the same -->
 <div class="ai-generator">
   <div class="generator-header">
-    <h3>🤖 Test Package Generator</h3>
-    <p class="subtitle">Describe what you want to test, and we will generate complete test packages</p>
+    <h3>{currentDomain.icon} AI Test Package Generator</h3>
+    <p class="subtitle">{currentDomain.description}</p>
+    <div class="domain-context-badge">
+      <span>🎯 Generating for: <strong>{currentDomain.label}</strong></span>
+    </div>
   </div>
 
   {#if !generatedPackage}
-    <!-- Input Form -->
     <div class="input-section">
       <!-- Templates -->
       <div class="templates-section">
         <span class="label">Quick Templates</span>
         <div class="template-grid">
-          {#each promptTemplates as template}
-            <button 
-              class="template-btn" 
-              on:click={() => useTemplate(template)}
-              type="button"
-              aria-label={`Use ${template.name} template`}
-            >
-              <span class="template-icon" aria-hidden="true">{template.icon}</span>
+          {#each currentTemplates as template}
+            <button class="template-btn" on:click={() => useTemplate(template)} type="button">
+              <span class="template-icon">{template.icon}</span>
               <span class="template-name">{template.name}</span>
             </button>
           {/each}
@@ -369,10 +321,9 @@
         <textarea
           id="prompt"
           bind:value={testPrompt}
-          placeholder="Example: Test the user login flow including successful login, invalid credentials, and password reset..."
+          placeholder="Example: Test the user login flow including successful login, invalid credentials..."
           rows="4"
           disabled={generating}
-          aria-describedby={error ? 'error-message' : undefined}
         ></textarea>
       </div>
 
@@ -380,212 +331,84 @@
         <div class="form-group">
           <label for="testType">Test Type</label>
           <select id="testType" bind:value={testType} disabled={generating}>
-            {#each testTypes as type}
+            {#each currentTestTypes as type}
               <option value={type.value}>{type.icon} {type.label}</option>
             {/each}
           </select>
         </div>
 
         <div class="form-group">
-          <label for="framework">Framework</label>
+          <label for="framework">Framework / Tool</label>
           <select id="framework" bind:value={framework} disabled={generating}>
-            {#each frameworks as fw}
+            {#each currentFrameworks as fw}
               <option value={fw.value}>{fw.icon} {fw.label}</option>
             {/each}
           </select>
         </div>
       </div>
 
-      <div class="options-row">
-        <label class="checkbox">
-          <input type="checkbox" bind:checked={includeManualSteps} disabled={generating} />
-          <span>Include Manual Test Cases</span>
-        </label>
-        <label class="checkbox">
-          <input type="checkbox" bind:checked={includeBusinessReport} disabled={generating} />
-          <span>Include Business Report</span>
-        </label>
-      </div>
-
       {#if error}
-        <div id="error-message" class="error-message" role="alert">
-          <span aria-hidden="true">⚠️</span>
-          {error}
-        </div>
+        <div class="error-message">{error}</div>
       {/if}
 
-      <button 
-        class="generate-btn" 
-        on:click={generatePackage}
-        disabled={generating || !testPrompt.trim()}
-        aria-busy={generating}
-      >
+      <button class="generate-btn" on:click={generatePackage} disabled={generating || !testPrompt.trim()}>
         {#if generating}
-          <span class="spinner" aria-hidden="true"></span>
+          <span class="spinner"></span>
           <span>Generating...</span>
         {:else}
-          <span aria-hidden="true">🚀</span>
-          <span>Generate Test Package</span>
+          <span>🚀 Generate {currentDomain.label}</span>
         {/if}
       </button>
     </div>
   {:else}
-    <!-- Results Section -->
     <div class="results-section">
       <div class="results-header">
         <h4>Generated Test Package</h4>
         <div class="results-actions">
-          {#if saveSuccess}
-            <span class="success-badge" role="status">✓ Saved!</span>
-          {/if}
-          <button class="action-btn" on:click={saveToLibrary} aria-label="Save to library">💾 Save</button>
-          <button class="action-btn" on:click={resetForm} aria-label="Create new package">🔄 New</button>
+          <button class="action-btn" on:click={resetForm}>🔄 New</button>
         </div>
       </div>
 
-      <!-- Tabs -->
-      <div class="tabs" role="tablist">
-        <button 
-          class="tab-btn" 
-          class:active={activeTab === 'automated'}
-          on:click={() => activeTab = 'automated'}
-          role="tab"
-          aria-selected={activeTab === 'automated'}
-          aria-controls="automated-panel"
-        >
-          <span aria-hidden="true">🤖</span>
-          Automated ({generatedPackage.automated?.testCases?.length || 0})
+      <div class="tabs">
+        <button class="tab-btn {activeTab === 'automated' ? 'active' : ''}" on:click={() => activeTab = 'automated'}>
+          🤖 Automated
         </button>
-        <button 
-          class="tab-btn" 
-          class:active={activeTab === 'manual'}
-          on:click={() => activeTab = 'manual'}
-          role="tab"
-          aria-selected={activeTab === 'manual'}
-          aria-controls="manual-panel"
-        >
-          <span aria-hidden="true">📝</span>
-          Manual ({generatedPackage.manual?.testCases?.length || 0})
-        </button>
-        <button 
-          class="tab-btn" 
-          class:active={activeTab === 'business'}
-          on:click={() => activeTab = 'business'}
-          role="tab"
-          aria-selected={activeTab === 'business'}
-          aria-controls="business-panel"
-        >
-          <span aria-hidden="true">📊</span>
-          Business
+        <button class="tab-btn {activeTab === 'business' ? 'active' : ''}" on:click={() => activeTab = 'business'}>
+          📊 Business
         </button>
       </div>
 
-      <div class="tab-content">
-        {#if activeTab === 'automated'}
-          <div id="automated-panel" class="code-section" role="tabpanel">
-            <div class="code-header">
-              <h5>Test Code ({generatedPackage.automated?.framework})</h5>
-              <button 
-                class="copy-btn" 
-                on:click={() => copyToClipboard(generatedPackage.automated?.code)}
-                aria-label="Copy code to clipboard"
-              >
-                📋 Copy
-              </button>
-            </div>
-            <pre class="code-block"><code>{generatedPackage.automated?.code || '// No code generated'}</code></pre>
-            
-            {#if generatedPackage.automated?.dependencies?.length > 0}
-              <h5>Dependencies</h5>
-              <pre class="dependencies">{generatedPackage.automated.dependencies.join('\n')}</pre>
-            {/if}
+      {#if activeTab === 'automated'}
+        <div class="code-section">
+          <div class="code-header">
+            <h5>Test Code ({framework})</h5>
+            <button class="copy-btn" on:click={() => copyToClipboard(generatedPackage.automated?.executableCode || '')}>
+              📋 Copy
+            </button>
           </div>
-        {/if}
-
-        {#if activeTab === 'manual'}
-          <div id="manual-panel" class="manual-section" role="tabpanel">
-            {#if generatedPackage.manual?.testCases?.length > 0}
-              {#each generatedPackage.manual.testCases as testCase}
-                <div class="test-case">
-                  <h5>{testCase.id}: {testCase.title}</h5>
-                  <p class="priority-{testCase.priority?.toLowerCase()}">Priority: {testCase.priority}</p>
-                  <p>{testCase.description}</p>
-                  
-                  {#if testCase.preconditions?.length > 0}
-                    <h6>Preconditions:</h6>
-                    <ul>
-                      {#each testCase.preconditions as pre}
-                        <li>{pre}</li>
-                      {/each}
-                    </ul>
-                  {/if}
-
-                  <h6>Test Steps:</h6>
-                  <table class="steps-table">
-                    <thead>
-                      <tr>
-                        <th>Step</th>
-                        <th>Action</th>
-                        <th>Expected Result</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#each testCase.steps as step}
-                        <tr>
-                          <td>{step.step}</td>
-                          <td>{step.action}</td>
-                          <td>{step.expectedResult}</td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </div>
-              {/each}
-            {:else}
-              <p>No manual test cases generated</p>
-            {/if}
-          </div>
-        {/if}
-
-        {#if activeTab === 'business'}
-          <div id="business-panel" class="business-section" role="tabpanel">
-            <h5>Executive Summary</h5>
-            <p>{generatedPackage.business?.executiveSummary}</p>
-            
-            <h5>Key Metrics</h5>
-            <div class="metrics-grid">
-              {#each Object.entries(generatedPackage.business?.keyMetrics || {}) as [key, value]}
-                <div class="metric">
-                  <span class="metric-label">{key}</span>
-                  <span class="metric-value">{value}</span>
-                </div>
-              {/each}
-            </div>
-
-            <h5>Business Value</h5>
-            <ul>
-              {#each generatedPackage.business?.businessValue || [] as value}
-                <li>{value}</li>
-              {/each}
-            </ul>
-
-            <h5>Risks</h5>
-            {#each generatedPackage.business?.risks || [] as risk}
-              <div class="risk-item">
-                <strong>{risk.risk}</strong>
-                <span class="risk-impact {risk.impact?.toLowerCase()}">{risk.impact}</span>
-                <p>{risk.mitigation}</p>
+          <pre class="code-block"><code>{generatedPackage.automated?.executableCode || '// No code generated'}</code></pre>
+          
+          {#if generatedPackage.automated?.testCases?.length > 0}
+            <h5 style="color: #e5e7eb; margin-top: 1rem;">Test Cases</h5>
+            {#each generatedPackage.automated.testCases as test, index}
+              <div class="test-case">
+                <h5>{index + 1}. {test.name}</h5>
+                <p>{test.description}</p>
               </div>
             {/each}
-          </div>
-        {/if}
-      </div>
+          {/if}
+        </div>
+      {:else}
+        <div class="business-section">
+          <h5>Executive Summary</h5>
+          <p>{generatedPackage.business?.executiveSummary}</p>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
 
 <style>
-  /* Your existing styles remain exactly the same */
   .ai-generator {
     background: white;
     border-radius: 0.5rem;
@@ -606,10 +429,19 @@
   .subtitle {
     color: #6b7280;
     font-size: 0.875rem;
-    margin: 0;
+    margin: 0 0 0.5rem 0;
   }
 
-  /* Templates */
+  .domain-context-badge {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    background: #ede9fe;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    color: #5b21b6;
+  }
+
   .templates-section {
     margin-bottom: 1.5rem;
   }
@@ -617,7 +449,6 @@
   .templates-section .label {
     display: block;
     font-weight: 500;
-    color: #374151;
     margin-bottom: 0.5rem;
   }
 
@@ -644,11 +475,6 @@
     background: #e5e7eb;
   }
 
-  .template-icon {
-    font-size: 1rem;
-  }
-
-  /* Form */
   .form-group {
     margin-bottom: 1rem;
   }
@@ -656,7 +482,6 @@
   .form-group label {
     display: block;
     font-weight: 500;
-    color: #374151;
     margin-bottom: 0.5rem;
   }
 
@@ -670,17 +495,6 @@
     background: white;
   }
 
-  textarea:focus, select:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
-  }
-
-  textarea:disabled, select:disabled {
-    background: #f3f4f6;
-    cursor: not-allowed;
-  }
-
   .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -688,28 +502,6 @@
     margin-bottom: 1rem;
   }
 
-  .options-row {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-  }
-
-  .checkbox {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    font-size: 0.875rem;
-    color: #374151;
-  }
-
-  .checkbox input {
-    width: auto;
-    margin: 0;
-  }
-
-  /* Generate Button */
   .generate-btn {
     width: 100%;
     padding: 0.75rem;
@@ -746,24 +538,17 @@
   }
 
   @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    to { transform: rotate(360deg); }
   }
 
-  /* Error Message */
   .error-message {
     padding: 0.75rem;
     background: #fee2e2;
     color: #991b1b;
     border-radius: 0.375rem;
     margin-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
   }
 
-  /* Results Section */
   .results-section {
     margin-top: 1rem;
   }
@@ -802,21 +587,11 @@
     background: #e5e7eb;
   }
 
-  .success-badge {
-    padding: 0.25rem 0.75rem;
-    background: #d1fae5;
-    color: #065f46;
-    border-radius: 0.25rem;
-    font-size: 0.875rem;
-  }
-
-  /* Tabs */
   .tabs {
     display: flex;
     gap: 0.5rem;
     border-bottom: 1px solid #e5e7eb;
     margin-bottom: 1rem;
-    overflow-x: auto;
   }
 
   .tab-btn {
@@ -826,7 +601,6 @@
     border-bottom: 2px solid transparent;
     cursor: pointer;
     color: #6b7280;
-    white-space: nowrap;
     font-size: 0.875rem;
     display: flex;
     align-items: center;
@@ -839,7 +613,6 @@
     font-weight: 500;
   }
 
-  /* Code Section */
   .code-section {
     background: #1f2937;
     border-radius: 0.375rem;
@@ -881,26 +654,9 @@
     border-radius: 0.25rem;
     overflow-x: auto;
     font-size: 0.875rem;
-    margin: 0 0 1rem 0;
+    margin: 0;
     white-space: pre-wrap;
     font-family: 'Monaco', 'Menlo', monospace;
-  }
-
-  .dependencies {
-    background: #374151;
-    color: #e5e7eb;
-    padding: 0.5rem;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    margin: 0;
-    font-family: 'Monaco', 'Menlo', monospace;
-  }
-
-  /* Manual Test Cases */
-  .manual-section {
-    max-height: 500px;
-    overflow-y: auto;
-    padding-right: 0.5rem;
   }
 
   .test-case {
@@ -917,49 +673,8 @@
     margin: 0 0 0.5rem 0;
   }
 
-  .test-case h6 {
-    font-size: 0.875rem;
-    color: #374151;
-    margin: 1rem 0 0.25rem 0;
-  }
-
-  .priority-high {
-    color: #dc2626;
-    font-weight: 500;
-  }
-  
-  .priority-medium {
-    color: #f59e0b;
-    font-weight: 500;
-  }
-  
-  .priority-low {
-    color: #10b981;
-    font-weight: 500;
-  }
-
-  .steps-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 0.5rem;
-    font-size: 0.875rem;
-  }
-
-  .steps-table th,
-  .steps-table td {
-    padding: 0.5rem;
-    text-align: left;
-    border: 1px solid #e5e7eb;
-  }
-
-  .steps-table th {
-    background: #f3f4f6;
-    font-weight: 600;
-  }
-
-  /* Business Section */
   .business-section {
-    padding: 0.5rem;
+    padding: 1rem;
     max-height: 500px;
     overflow-y: auto;
   }
@@ -967,95 +682,16 @@
   .business-section h5 {
     font-size: 1rem;
     color: #1f2937;
-    margin: 1rem 0 0.5rem 0;
+    margin: 0 0 0.5rem 0;
   }
 
-  .business-section h5:first-child {
-    margin-top: 0;
-  }
-
-  .metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 0.5rem;
-    margin: 1rem 0;
-  }
-
-  .metric {
-    background: #f3f4f6;
-    padding: 0.75rem;
-    border-radius: 0.375rem;
-    text-align: center;
-  }
-
-  .metric-label {
-    display: block;
-    font-size: 0.75rem;
-    color: #6b7280;
-    text-transform: capitalize;
-  }
-
-  .metric-value {
-    display: block;
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: #1f2937;
-  }
-
-  .risk-item {
-    padding: 0.75rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .risk-item strong {
-    display: block;
-    color: #1f2937;
-    margin-bottom: 0.25rem;
-  }
-
-  .risk-impact {
-    display: inline-block;
-    padding: 0.125rem 0.5rem;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    margin-left: 0.5rem;
-  }
-
-  .risk-impact.high {
-    background: #fee2e2;
-    color: #991b1b;
-  }
-
-  .risk-impact.medium {
-    background: #fed7aa;
-    color: #92400e;
-  }
-
-  .risk-impact.low {
-    background: #d1fae5;
-    color: #065f46;
-  }
-
-  /* Responsive */
   @media (max-width: 640px) {
     .form-row {
       grid-template-columns: 1fr;
     }
     
-    .options-row {
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-    
     .template-grid {
       flex-direction: column;
-    }
-    
-    .results-header {
-      flex-direction: column;
-      align-items: flex-start;
     }
   }
 </style>

@@ -1,6 +1,9 @@
 ﻿import { createClient } from '@supabase/supabase-js';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
 
+// Check if we're in the browser
+const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+
 export const supabase = createClient(
   PUBLIC_SUPABASE_URL,
   PUBLIC_SUPABASE_ANON_KEY,
@@ -9,8 +12,7 @@ export const supabase = createClient(
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storageKey: 'supabase-auth-token',
-      storage: typeof localStorage !== 'undefined' ? localStorage : undefined,
+      storage: isBrowser ? localStorage : undefined,
       flowType: 'pkce'
     }
   }
