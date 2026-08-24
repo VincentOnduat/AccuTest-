@@ -2,7 +2,28 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  
+  import { supabase } from '$lib/supabase';
+
+  // Auth fetch helper — attaches the Bearer token, mirroring the pattern used
+  // on the main dashboard and ATRD list pages. Plain fetch() with only
+  // credentials:'include' never authenticates here because nothing syncs the
+  // Supabase session into server cookies.
+  async function authFetch(url: string, options: RequestInit = {}) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> | undefined)
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    return fetch(url, { ...options, headers });
+  }
+
   let atrd: any = null;
   let loading = true;
   let error = '';
@@ -26,8 +47,8 @@
     error = '';
     
     try {
-      const response = await fetch(`/api/atrd/${id}`, { credentials: 'include' });
-      
+      const response = await authFetch(`/api/atrd/${id}`);
+
       if (response.ok) {
         atrd = await response.json();
         editName = atrd.name;
@@ -48,7 +69,7 @@
   
   async function loadTestPackages() {
     try {
-      const response = await fetch(`/api/packages?atrd_id=${id}`, { credentials: 'include' });
+      const response = await authFetch(`/api/packages?atrd_id=${id}`);
       if (response.ok) {
         const result = await response.json();
         testPackages = result.data || [];
@@ -62,15 +83,13 @@
     saving = true;
     
     try {
-      const response = await fetch(`/api/atrd/${id}`, {
+      const response = await authFetch(`/api/atrd/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: editName,
           content: editContent,
           domain: atrd.domain
-        }),
-        credentials: 'include'
+        })
       });
       
       if (response.ok) {
@@ -94,15 +113,14 @@
     if (!atrd) return;
     
     try {
-      const response = await fetch('/api/ai/generate-test-package', {
+      const response = await authFetch('/api/ai/generate-test-package', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           atrdId: atrd.id,
-          requirements: atrd.content,
+          document: JSON.stringify(atrd.content),
+          testDomain: atrd.domain,
           name: `${atrd.name} - Test Package`
-        }),
-        credentials: 'include'
+        })
       });
       
       if (response.ok) {
@@ -123,7 +141,7 @@
     if (!confirm('Delete this ATRD? This will also delete all associated test packages.')) return;
     
     try {
-      const response = await fetch(`/api/atrd/${id}`, { method: 'DELETE' });
+      const response = await authFetch(`/api/atrd/${id}`, { method: 'DELETE' });
       
       if (response.ok) {
         goto('/dashboard/atrd');

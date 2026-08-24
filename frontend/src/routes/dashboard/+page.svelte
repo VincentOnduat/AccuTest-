@@ -237,7 +237,13 @@
     return diffDays < 0 ? `${Math.abs(diffDays)} days overdue` : `In ${diffDays} days`;
   }
 
-  async function handleParsedRequirements(data: any) {
+  async function handleParsedRequirements(event: CustomEvent<any>) {
+    // Svelte's on:eventName directive calls the handler with the raw
+    // CustomEvent, not its payload — the actual data dispatched by
+    // DynamicATRDParser is in event.detail. Using `event` directly here used
+    // to save the Event object itself (JSON.stringify'd down to
+    // {"isTrusted": false}) as the ATRD content.
+    const data = event.detail;
     parsedRequirements = data;
     console.log('Parsed requirements:', data);
     

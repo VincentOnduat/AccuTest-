@@ -71,7 +71,7 @@
   }
   
   function viewATRD(atrd: any) {
-    alert(`📄 ${atrd.name}\n\nDomain: ${atrd.domain || 'General'}\nCreated: ${new Date(atrd.created_at).toLocaleString()}\n\nContent: ${JSON.stringify(atrd.content, null, 2)}`);
+    goto(`/dashboard/atrd/${atrd.id}`);
   }
 </script>
 

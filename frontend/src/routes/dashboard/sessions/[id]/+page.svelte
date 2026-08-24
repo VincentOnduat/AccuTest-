@@ -5,7 +5,6 @@
   import { page } from '$app/stores';
 
   let session: any = null;
-  let testResults: any[] = [];
   let loading = true;
   let error = '';
   let running = false;
@@ -29,17 +28,14 @@
         .single();
 
       if (sessionError) throw sessionError;
-      
+
       session = sessionData;
-
-      // Fetch test results for this session
-      const { data: results } = await supabase
-        .from('test_results')
-        .select('*, tests(*)')
-        .eq('session_id', sessionId);
-
-      testResults = results || [];
-      
+      // Note: this deliberately doesn't query test_results — that table's
+      // session_id foreign key points at test_sessions, an unrelated table,
+      // and it has no relationship to `tests` at all. A run's outcome is
+      // recorded directly on this session row instead (test_count,
+      // passed_tests, failed_tests, duration, logs), which is what's rendered
+      // below.
     } catch (err) {
       error = getErrorMessage(err);
     } finally {
@@ -56,10 +52,14 @@
         .update({ status: 'running', started_at: new Date().toISOString() })
         .eq('id', sessionId);
 
-      // Call your automation API
+      // Call the automation API
+      const { data: { session: authSession } } = await supabase.auth.getSession();
       const response = await fetch('/api/run-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authSession?.access_token ? { Authorization: `Bearer ${authSession.access_token}` } : {})
+        },
         body: JSON.stringify({ sessionId })
       });
 
@@ -129,46 +129,32 @@
 
     <div class="stats-grid">
       <div class="stat-box">
-        <span class="stat-value">{testResults.length}</span>
+        <span class="stat-value">{session.test_count || 0}</span>
         <span class="stat-label">Total Tests</span>
       </div>
       <div class="stat-box success">
-        <span class="stat-value">{testResults.filter(r => r.status === 'passed').length}</span>
+        <span class="stat-value">{session.passed_tests || 0}</span>
         <span class="stat-label">Passed</span>
       </div>
       <div class="stat-box failed">
-        <span class="stat-value">{testResults.filter(r => r.status === 'failed').length}</span>
+        <span class="stat-value">{session.failed_tests || 0}</span>
         <span class="stat-label">Failed</span>
       </div>
       <div class="stat-box">
-        <span class="stat-value">{session.duration || '0s'}</span>
+        <span class="stat-value">{session.duration ? (session.duration / 1000).toFixed(1) + 's' : '0s'}</span>
         <span class="stat-label">Duration</span>
       </div>
     </div>
 
     <div class="test-results">
       <h2>Test Results</h2>
-      {#if testResults.length === 0}
-        <p class="empty">No tests have been run in this session yet.</p>
+      {#if session.test_count}
+        <p class="empty">
+          {session.passed_tests || 0} of {session.test_count} test{session.test_count === 1 ? '' : 's'} passed.
+          Per-test detail isn't tracked for sessions — see Session Logs below for a summary.
+        </p>
       {:else}
-        <div class="results-list">
-          {#each testResults as result}
-            <div class="result-item">
-              <div class="result-header">
-                <h3>{result.tests?.name || 'Test'}</h3>
-                <span class="result-status {result.status}">{result.status}</span>
-              </div>
-              {#if result.error}
-                <pre class="error-details">{result.error}</pre>
-              {/if}
-              <div class="result-meta">
-                <span>Duration: {result.duration || '0s'}</span>
-                <span>•</span>
-                <span>Completed: {new Date(result.completed_at).toLocaleTimeString()}</span>
-              </div>
-            </div>
-          {/each}
-        </div>
+        <p class="empty">No tests have been run in this session yet.</p>
       {/if}
     </div>
 
@@ -327,66 +313,6 @@
     font-size: 1.125rem;
     color: #1f2937;
     margin-bottom: 1rem;
-  }
-
-  .results-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .result-item {
-    padding: 1rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-  }
-
-  .result-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-  }
-
-  .result-header h3 {
-    font-size: 1rem;
-    font-weight: 500;
-    color: #1f2937;
-  }
-
-  .result-status {
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    font-weight: 500;
-    text-transform: capitalize;
-  }
-
-  .result-status.passed {
-    background: #d1fae5;
-    color: #065f46;
-  }
-
-  .result-status.failed {
-    background: #fee2e2;
-    color: #991b1b;
-  }
-
-  .error-details {
-    background: #fee2e2;
-    color: #991b1b;
-    padding: 0.75rem;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    margin-bottom: 0.5rem;
-    white-space: pre-wrap;
-  }
-
-  .result-meta {
-    font-size: 0.75rem;
-    color: #6b7280;
-    display: flex;
-    gap: 0.5rem;
   }
 
   .log-output {

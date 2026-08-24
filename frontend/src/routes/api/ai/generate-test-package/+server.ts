@@ -30,7 +30,7 @@ export async function POST({ request }) {
     }
     
     const body = await request.json();
-    const { document, name, framework = 'playwright', testDomain = 'functional' } = body;
+    const { document, name, framework = 'playwright', testDomain = 'functional', atrdId } = body;
 
     console.log('🔍 DEBUG - Received testDomain:', testDomain);
     console.log('🔍 DEBUG - Full body:', JSON.stringify(body, null, 2));
@@ -91,7 +91,8 @@ console.log(`🔧 Framework: ${framework}, testCode length: ${testCode.length}`)
         name: packageName,
         description: `Generated from: ${document.substring(0, 100)}`,
         test_cases: testPackage,
-        status: 'draft'
+        status: 'draft',
+        ...(atrdId ? { atrd_id: atrdId } : {})
       })
       .select()
       .single();
