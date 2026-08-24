@@ -87,3 +87,105 @@
 - **CI/CD**: GitHub Actions
 
 ## 📁 Project Structure
+
+```
+AccuTest-/
+├── backend/                  # FastAPI service
+│   └── app/
+│       ├── main.py           # App entrypoint, CORS, router registration
+│       ├── config.py         # Settings (Supabase, OpenAI, etc.)
+│       ├── dependencies.py   # Shared FastAPI dependencies (auth, client)
+│       ├── routers/          # auth, tasks, atrd, packages
+│       ├── services/         # Business logic (e.g. automator)
+│       └── utils/
+├── frontend/                  # SvelteKit app
+│   ├── src/
+│   │   ├── routes/
+│   │   │   ├── dashboard/    # UI: atrd, packages, tasks, sessions,
+│   │   │   │                 #     tests, analytics, business-tests,
+│   │   │   │                 #     test-execution, profile, settings
+│   │   │   └── api/          # SvelteKit API routes: ai, atrd, auth,
+│   │   │                     #     packages, reports, business-reports,
+│   │   │                     #     test-executions, test-runner,
+│   │   │                     #     notifications, health
+│   │   ├── lib/               # components, stores, server, supabase.ts
+│   │   └── hooks.server.ts
+│   └── migrations/            # Supabase SQL migrations
+└── package.json                # Root workspace scripts (proxies to frontend)
+```
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+
+- Python 3.11+ (backend targets 3.14)
+- A [Supabase](https://supabase.com/) project (URL + anon/service keys)
+- An [OpenAI](https://platform.openai.com/) API key
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/VincentOnduat/AccuTest-.git
+cd AccuTest-
+```
+
+### 2. Frontend setup
+
+```bash
+cd frontend
+npm install
+cp .env.example .env   # then fill in your Supabase URL/keys
+npm run dev
+```
+
+The app runs at `http://localhost:5173`.
+
+### 3. Backend setup
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env       # then fill in Supabase + OpenAI credentials
+uvicorn app.main:app --reload
+```
+
+The API runs at `http://localhost:8000` (interactive docs at `/docs`).
+
+> ⚠️ Never commit `.env` files or paste real API keys into chat/commits — set them directly in your local `.env`.
+
+## 🔌 API Endpoints
+
+The FastAPI backend exposes routers under the following prefixes (see `/docs` for the full interactive spec):
+
+| Prefix | Router | Purpose |
+|--------|--------|---------|
+| `/auth` | `auth.py` | Authentication (Supabase-backed) |
+| `/tasks` | `tasks.py` | Create, list, and update automation tasks |
+| `/api/atrd` | `atrd.py` | Upload/parse ATRD documents, link generated tasks |
+| `/api/packages` | `packages.py` | Manage generated test packages |
+
+The SvelteKit frontend also serves its own internal API routes under `/api/*` (e.g. `ai/generate-test-package`, `ai/parse-atrd`, `atrd/*`, `packages/*`, `reports/*`, `business-reports/*`, `test-executions/*`, `test-runner`, `notifications`, `health`) that proxy to Supabase and OpenAI directly from the server.
+
+## 🗄️ Database Schema
+
+Data is stored in Supabase PostgreSQL. Core tables referenced by the app include:
+
+| Table | Description |
+|-------|--------------|
+| `profiles` | User profile data |
+| `tasks` | Automation tasks (linked to ATRDs and test packages) |
+| `atrd_results` | Parsed ATRD documents and metadata |
+| `test_packages` | Generated test packages and their code |
+| `tests` | Individual test cases |
+| `sessions` | Test execution sessions |
+| `test_executions` | Execution history and results |
+| `business_reports` | Generated analytics/business reports |
+| `notifications` | User notifications |
+
+SQL migrations live in `frontend/migrations/`. Row-level security policies and full column definitions are managed in the Supabase project directly.
+
+## 📄 License
+
+Licensed under **AGPL v3**. See [`LICENSE`](LICENSE) for details.
