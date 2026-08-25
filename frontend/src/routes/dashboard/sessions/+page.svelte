@@ -13,28 +13,23 @@
   });
 
   async function fetchSessions() {
+    loading = true;
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
-        goto('/');
+        goto('/login');
         return;
       }
 
-      let query = supabase
+      const { data, error: fetchError } = await supabase
         .from('sessions')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (filter !== 'all') {
-        query = query.eq('status', filter);
-      }
-
-      const { data, error: fetchError } = await query;
-
       if (fetchError) throw fetchError;
-      
+
       sessions = data || [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -43,7 +38,10 @@
     }
   }
 
-  $: filter, fetchSessions();
+  // Filtering client-side (instead of re-querying on every click, which this
+  // used to do via a reactive statement that also double-fired on mount
+  // alongside onMount's own fetch) keeps switching filters instant.
+  $: filteredSessions = filter === 'all' ? sessions : sessions.filter((s) => s.status === filter);
 
   function getStatusColor(status: string) {
     const colors: Record<string, string> = {
@@ -72,28 +70,28 @@
   </div>
 
   <div class="filters">
-    <button class:active={filter === 'all'} on:click={() => filter = 'all'}>All</button>
-    <button class:active={filter === 'running'} on:click={() => filter = 'running'}>Running</button>
-    <button class:active={filter === 'completed'} on:click={() => filter = 'completed'}>Completed</button>
-    <button class:active={filter === 'failed'} on:click={() => filter = 'failed'}>Failed</button>
+    <button class:active={filter === 'all'} on:click={() => filter = 'all'}>All ({sessions.length})</button>
+    <button class:active={filter === 'running'} on:click={() => filter = 'running'}>Running ({sessions.filter(s => s.status === 'running').length})</button>
+    <button class:active={filter === 'completed'} on:click={() => filter = 'completed'}>Completed ({sessions.filter(s => s.status === 'completed').length})</button>
+    <button class:active={filter === 'failed'} on:click={() => filter = 'failed'}>Failed ({sessions.filter(s => s.status === 'failed').length})</button>
   </div>
 
   {#if loading}
     <div class="loading">Loading sessions...</div>
   {:else if error}
     <div class="error">Error: {error}</div>
-  {:else if sessions.length === 0}
+  {:else if filteredSessions.length === 0}
     <div class="empty-state">
       <span class="empty-icon">🔄</span>
       <h3>No sessions found</h3>
-      <p>Create your first test session to get started</p>
+      <p>{sessions.length === 0 ? 'Create your first test session to get started' : 'No sessions match this filter'}</p>
       <button class="primary-btn" on:click={() => goto('/dashboard/sessions/new')}>
         Create Session
       </button>
     </div>
   {:else}
     <div class="sessions-list">
-      {#each sessions as session}
+      {#each filteredSessions as session}
         <button class="session-card" on:click={() => goto(`/dashboard/sessions/${session.id}`)}>
           <div class="session-info">
             <h3>{session.name || 'Untitled Session'}</h3>

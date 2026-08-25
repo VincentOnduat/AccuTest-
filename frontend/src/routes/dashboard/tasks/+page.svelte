@@ -8,86 +8,42 @@
   let error = '';
   let filter = 'all';
 
-  // Mock tasks data - replace with actual Supabase queries when you create a tasks table
   onMount(async () => {
+    await fetchTasks();
+  });
+
+  async function fetchTasks() {
+    loading = true;
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
-        goto('/');
+        goto('/login');
         return;
       }
 
-      // TODO: Replace with actual tasks table query
-      // For now, using mock data
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      tasks = [
-        { 
-          id: 1, 
-          title: 'Review test results', 
-          description: 'Review the results from the latest test run and identify any issues',
-          due: '2024-03-10', 
-          priority: 'high',
-          status: 'pending',
-          assigned_to: user.email,
-          created_at: '2024-03-05'
-        },
-        { 
-          id: 2, 
-          title: 'Schedule regression tests', 
-          description: 'Schedule the weekly regression test suite for the staging environment',
-          due: '2024-03-11', 
-          priority: 'medium',
-          status: 'in-progress',
-          assigned_to: user.email,
-          created_at: '2024-03-05'
-        },
-        { 
-          id: 3, 
-          title: 'Update test suites', 
-          description: 'Update the test suites with new test cases for the recent features',
-          due: '2024-03-13', 
-          priority: 'low',
-          status: 'pending',
-          assigned_to: user.email,
-          created_at: '2024-03-04'
-        },
-        { 
-          id: 4, 
-          title: 'Fix flaky tests', 
-          description: 'Investigate and fix the flaky tests in the payment flow',
-          due: '2024-03-09', 
-          priority: 'high',
-          status: 'pending',
-          assigned_to: user.email,
-          created_at: '2024-03-04'
-        },
-        { 
-          id: 5, 
-          title: 'Document test procedures', 
-          description: 'Create documentation for the test procedures and best practices',
-          due: '2024-03-15', 
-          priority: 'medium',
-          status: 'completed',
-          assigned_to: user.email,
-          created_at: '2024-03-03'
-        }
-      ];
+      const { data, error: fetchError } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('due_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false });
+
+      if (fetchError) throw fetchError;
+
+      tasks = data || [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
     } finally {
       loading = false;
     }
-  });
+  }
 
-  $: filteredTasks = tasks.filter(task => {
-    if (filter === 'all') return true;
-    return task.status === filter;
-  });
+  $: filteredTasks = tasks.filter((task) => filter === 'all' || task.status === filter);
 
   function getPriorityColor(priority: string) {
-    const colors: { [key: string]: string } = {
+    const colors: Record<string, string> = {
+      critical: '#991b1b',
       high: '#ef4444',
       medium: '#f59e0b',
       low: '#10b981'
@@ -96,10 +52,11 @@
   }
 
   function getStatusColor(status: string) {
-    const colors: { [key: string]: string } = {
+    const colors: Record<string, string> = {
       pending: '#6b7280',
       'in-progress': '#3b82f6',
-      completed: '#10b981'
+      completed: '#10b981',
+      cancelled: '#9ca3af'
     };
     return colors[status] || '#6b7280';
   }
@@ -108,36 +65,49 @@
     goto('/dashboard/tasks/new');
   }
 
-  function viewTask(id: number) {
+  function viewTask(id: string) {
     goto(`/dashboard/tasks/${id}`);
   }
 
-  function formatDate(dateString: string) {
+  function formatDate(dateString: string | null) {
+    if (!dateString) return 'No due date';
     const date = new Date(dateString);
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      return 'Tomorrow';
-    } else {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
+
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
-  function isOverdue(dueDate: string) {
+  function isOverdue(dueDate: string | null) {
+    if (!dueDate) return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const due = new Date(dueDate);
     due.setHours(0, 0, 0, 0);
     return due < today;
   }
+
+  // Marks a task complete without navigating into it — a real write to the
+  // tasks table, replacing what used to be a stub with a `/* Toggle status */`
+  // comment and no actual behavior.
+  async function toggleComplete(task: any) {
+    const nextStatus = task.status === 'completed' ? 'pending' : 'completed';
+    const { error: updateError } = await supabase
+      .from('tasks')
+      .update({ status: nextStatus, completed_at: nextStatus === 'completed' ? new Date().toISOString() : null })
+      .eq('id', task.id);
+
+    if (!updateError) {
+      tasks = tasks.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t));
+    }
+  }
 </script>
 
 <svelte:head>
-  <title>Tasks - Aether Automate</title>
+  <title>Tasks - AccuTest</title>
 </svelte:head>
 
 <div class="container">
@@ -174,7 +144,7 @@
     <div class="empty-state">
       <span class="empty-icon">📋</span>
       <h3>No tasks found</h3>
-      <p>Create your first task to get started</p>
+      <p>{tasks.length === 0 ? 'Create your first task to get started' : 'No tasks match this filter'}</p>
       <button class="primary-btn" on:click={createNewTask}>
         Create Task
       </button>
@@ -182,7 +152,7 @@
   {:else}
     <div class="tasks-list">
       {#each filteredTasks as task (task.id)}
-        <div class="task-card" class:overdue={isOverdue(task.due) && task.status !== 'completed'}>
+        <div class="task-card" class:overdue={isOverdue(task.due_date) && task.status !== 'completed'}>
           <button class="task-content" type="button" on:click={() => viewTask(task.id)}>
             <div class="task-header">
               <h3>{task.title}</h3>
@@ -190,15 +160,15 @@
                 {task.status}
               </span>
             </div>
-            
-            <p class="task-description">{task.description}</p>
-            
+
+            <p class="task-description">{task.description || 'No description'}</p>
+
             <div class="task-footer">
               <div class="task-meta">
                 <span class="meta-item">
                   <span class="meta-icon">📅</span>
-                  Due: {formatDate(task.due)}
-                  {#if isOverdue(task.due) && task.status !== 'completed'}
+                  Due: {formatDate(task.due_date)}
+                  {#if isOverdue(task.due_date) && task.status !== 'completed'}
                     <span class="overdue-badge">Overdue</span>
                   {/if}
                 </span>
@@ -209,20 +179,20 @@
                   </span>
                 </span>
               </div>
-              
-              <div class="task-actions">
-                <div 
-                  class="action-btn" 
-                  role="button"
-                  tabindex="0"
-                  on:click|stopPropagation={() => {/* Toggle status */}}
-                  on:keydown|stopPropagation={(e) => e.key === 'Enter' && {/* Toggle status */}}
-                >
-                  ✓
-                </div>
-              </div>
             </div>
           </button>
+
+          <div class="task-actions">
+            <button
+              type="button"
+              class="action-btn"
+              class:done={task.status === 'completed'}
+              title={task.status === 'completed' ? 'Mark as pending' : 'Mark as complete'}
+              on:click|stopPropagation={() => toggleComplete(task)}
+            >
+              ✓
+            </button>
+          </div>
         </div>
       {/each}
     </div>
@@ -297,6 +267,8 @@
     border-radius: 0.5rem;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     transition: all 0.2s;
+    display: flex;
+    align-items: stretch;
   }
 
   .task-card:hover {
@@ -315,12 +287,15 @@
     border: none;
     text-align: left;
     width: 100%;
+    flex: 1;
+    min-width: 0;
   }
 
   .task-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
+    gap: 0.5rem;
     margin-bottom: 0.5rem;
   }
 
@@ -336,6 +311,7 @@
     font-size: 0.75rem;
     font-weight: 500;
     text-transform: capitalize;
+    white-space: nowrap;
   }
 
   .task-description {
@@ -355,6 +331,7 @@
     display: flex;
     gap: 1rem;
     font-size: 0.875rem;
+    flex-wrap: wrap;
   }
 
   .meta-item {
@@ -380,7 +357,8 @@
 
   .task-actions {
     display: flex;
-    gap: 0.5rem;
+    align-items: center;
+    padding-right: 1.25rem;
   }
 
   .action-btn {
@@ -395,10 +373,17 @@
     align-items: center;
     justify-content: center;
     font-size: 1rem;
+    flex-shrink: 0;
   }
 
   .action-btn:hover {
     background: #f3f4f6;
+  }
+
+  .action-btn.done {
+    background: #d1fae5;
+    border-color: #10b981;
+    color: #065f46;
   }
 
   .loading, .error, .empty-state {

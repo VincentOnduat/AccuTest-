@@ -9,7 +9,8 @@
     role: '',
     notifications: true,
     email_notifications: true,
-    slack_webhook: ''
+    slack_webhook: '',
+    target_url: ''
   };
 
   let loading = true;
@@ -51,7 +52,8 @@
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+      if (!user) throw new Error('Not signed in');
+
       const { error } = await supabase
         .from('profiles')
         .upsert({
@@ -61,11 +63,11 @@
         });
 
       if (error) throw error;
-      
+
       message = 'Settings saved successfully!';
       setTimeout(() => message = '', 3000);
     } catch (err) {
-      message = 'Error saving settings: ' + err.message;
+      message = 'Error saving settings: ' + (err instanceof Error ? err.message : String(err));
     } finally {
       saving = false;
     }
@@ -100,6 +102,7 @@
     <div class="settings-grid">
       <div class="settings-nav">
         <a href="#profile" class="nav-item active">Profile</a>
+        <a href="#testing" class="nav-item">Testing</a>
         <a href="#notifications" class="nav-item">Notifications</a>
         <a href="#integrations" class="nav-item">Integrations</a>
         <a href="#security" class="nav-item">Security</a>
@@ -139,6 +142,26 @@
                 bind:value={profile.role}
                 placeholder="Your role"
               />
+            </div>
+          </section>
+
+          <section id="testing" class="settings-section">
+            <h2>Testing</h2>
+
+            <div class="form-group">
+              <label for="target_url">Target Application URL</label>
+              <input
+                type="url"
+                id="target_url"
+                bind:value={profile.target_url}
+                placeholder="https://staging.your-app.com"
+              />
+              <p class="field-hint">
+                Real test execution runs generated Playwright code against this URL — it's used
+                as the base for relative <code>page.goto()</code> / <code>request.get()</code>
+                calls in generated tests. Leave blank and those calls will fail with a navigation
+                error, which is expected until you point this at an app.
+              </p>
             </div>
           </section>
 
@@ -284,6 +307,20 @@
     border: 1px solid #d1d5db;
     border-radius: 0.375rem;
     font-size: 1rem;
+  }
+
+  .field-hint {
+    margin: 0.5rem 0 0 0;
+    font-size: 0.8125rem;
+    color: #6b7280;
+    line-height: 1.5;
+  }
+
+  .field-hint code {
+    background: #f3f4f6;
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.25rem;
+    font-size: 0.8em;
   }
 
   .checkbox-group {

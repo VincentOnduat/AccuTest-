@@ -106,11 +106,16 @@
           Environment: {session.environment || 'production'}
         </p>
       </div>
-      <div class="header-actions">
-        <button class="run-btn" on:click={runSession} disabled={running || session.status === 'running'}>
-          {running ? 'Starting...' : session.status === 'running' ? 'Running' : 'Run Session'}
-        </button>
-        <button class="delete-btn" on:click={deleteSession}>Delete</button>
+      <div class="header-actions-wrap">
+        <div class="header-actions">
+          <button class="run-btn" on:click={runSession} disabled={running || session.status === 'running'}>
+            {running ? '⏳ Running…' : session.status === 'running' ? 'Running' : 'Run Session'}
+          </button>
+          <button class="delete-btn" on:click={deleteSession}>Delete</button>
+        </div>
+        {#if running}
+          <p class="run-hint">Running real tests against your target app — this can take a bit longer than a click, especially with several tests.</p>
+        {/if}
       </div>
     </div>
 
@@ -200,9 +205,24 @@
     font-size: 0.875rem;
   }
 
+  .header-actions-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+  }
+
   .header-actions {
     display: flex;
     gap: 1rem;
+  }
+
+  .run-hint {
+    margin: 0;
+    max-width: 220px;
+    text-align: right;
+    font-size: 0.75rem;
+    color: #6b7280;
   }
 
   .run-btn, .delete-btn {

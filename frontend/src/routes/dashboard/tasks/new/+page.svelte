@@ -6,7 +6,7 @@
     title: '',
     description: '',
     priority: 'medium',
-    due: '',
+    due_date: '',
     assigned_to: ''
   };
 
@@ -19,21 +19,33 @@
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
-        goto('/');
+        goto('/login');
         return;
       }
 
-      // TODO: Replace with actual Supabase insert when you create a tasks table
-      console.log('Creating task:', { ...formData, user_id: user.id });
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      const { error: insertError } = await supabase
+        .from('tasks')
+        .insert([
+          {
+            title: formData.title,
+            description: formData.description || null,
+            priority: formData.priority,
+            due_date: formData.due_date || null,
+            assigned_to: formData.assigned_to || null,
+            status: 'pending',
+            user_id: user.id
+          }
+        ])
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
       goto('/dashboard/tasks');
     } catch (err) {
-      error = err.message;
+      error = err instanceof Error ? err.message : 'Failed to create task';
     } finally {
       loading = false;
     }
@@ -41,7 +53,7 @@
 </script>
 
 <svelte:head>
-  <title>New Task - Aether Automate</title>
+  <title>New Task - AccuTest</title>
 </svelte:head>
 
 <div class="container">
@@ -51,7 +63,7 @@
 
   <div class="form-card">
     <h1>Create New Task</h1>
-    
+
     <form on:submit|preventDefault={handleCreateTask}>
       <div class="form-group">
         <label for="title">Task Title *</label>
@@ -81,17 +93,28 @@
             <option value="low">Low</option>
             <option value="medium">Medium</option>
             <option value="high">High</option>
+            <option value="critical">Critical</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label for="due">Due Date</label>
+          <label for="due_date">Due Date</label>
           <input
             type="date"
-            id="due"
-            bind:value={formData.due}
+            id="due_date"
+            bind:value={formData.due_date}
           />
         </div>
+      </div>
+
+      <div class="form-group">
+        <label for="assigned_to">Assigned To</label>
+        <input
+          type="text"
+          id="assigned_to"
+          bind:value={formData.assigned_to}
+          placeholder="Optional — defaults to you"
+        />
       </div>
 
       {#if error}
@@ -161,6 +184,7 @@
     border: 1px solid #d1d5db;
     border-radius: 0.375rem;
     font-size: 1rem;
+    font-family: inherit;
   }
 
   .error {
@@ -199,5 +223,11 @@
   .secondary-btn {
     background: #f3f4f6;
     color: #374151;
+  }
+
+  @media (max-width: 640px) {
+    .form-row {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

@@ -9,11 +9,13 @@
 
   let { children } = $props();
 
+  const PUBLIC_PATHS = ['/', '/login', '/signup'];
+
   onMount(async () => {
     // Only check once on page load, not on every API error
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session && window.location.pathname !== '/') {
-      goto('/');
+    if (!session && !PUBLIC_PATHS.includes(window.location.pathname)) {
+      goto('/login');
     }
   });
 </script>

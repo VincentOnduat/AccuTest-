@@ -2,15 +2,25 @@
   import { supabase } from '$lib/supabase';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import IntegratedTestGenerator from '$lib/components/IntegratedTestGenerator.svelte';
   import DynamicATRDParser from '$lib/components/DynamicATRDParser.svelte';
   import BusinessReportView from '$lib/components/BusinessReportView.svelte';
   import { isOnline } from '$lib/stores/network';
+  import { fade } from 'svelte/transition';
+
+  type DashboardTab = 'quick' | 'atrd' | 'reports';
+  function tabFromUrl(): DashboardTab {
+    const t = $page.url.searchParams.get('tab');
+    return t === 'atrd' || t === 'reports' ? t : 'quick';
+  }
 
   let user: any = null;
   let loading = true;
   let error = '';
-  let activeTab: 'quick' | 'atrd' | 'reports' = 'quick';
+  // Other pages deep-link here with e.g. /dashboard?tab=atrd — honor that
+  // instead of always landing on Quick Generate regardless of the link.
+  let activeTab: DashboardTab = tabFromUrl();
   let parsedRequirements: any = null;
   let generatedReport: any = null;
   let atrdSaveMessage = '';
@@ -33,14 +43,15 @@
   let recentPackages: any[] = [];
   let recentATRDs: any[] = [];
 
-  // Domain configuration
-  const testDomains: { id: TestDomainId; icon: string; name: string; description: string }[] = [
-    { id: 'functional', icon: '🤖', name: 'Functional Testing', description: 'Web, mobile, desktop, API, ERP automation' },
-    { id: 'performance', icon: '⚡', name: 'Performance & Load', description: 'Load, stress, APM, SaaS labs' },
-    { id: 'security', icon: '🛡️', name: 'Security / DevSecOps', description: 'DAST, SAST, secrets, SBOM' },
-    { id: 'accessibility', icon: '♿', name: 'Accessibility Testing', description: 'WCAG, screen readers, compliance' },
-    { id: 'visual', icon: '👁️', name: 'Visual Testing', description: 'Visual diff, UI comparison, screenshots' },
-    { id: 'dataQuality', icon: '📊', name: 'Data/ETL Validation', description: 'Data pipelines, data quality, migration' }
+  // Domain configuration. `short` is what fits on a compact chip; `name` is
+  // the fuller label used in descriptions/tooltips.
+  const testDomains: { id: TestDomainId; icon: string; short: string; name: string; description: string }[] = [
+    { id: 'functional', icon: '🤖', short: 'Functional', name: 'Functional Testing', description: 'Web, mobile, desktop, API, ERP automation' },
+    { id: 'performance', icon: '⚡', short: 'Performance', name: 'Performance & Load', description: 'Load, stress, APM, SaaS labs' },
+    { id: 'security', icon: '🛡️', short: 'Security', name: 'Security / DevSecOps', description: 'DAST, SAST, secrets, SBOM' },
+    { id: 'accessibility', icon: '♿', short: 'Accessibility', name: 'Accessibility Testing', description: 'WCAG, screen readers, compliance' },
+    { id: 'visual', icon: '👁️', short: 'Visual', name: 'Visual Testing', description: 'Visual diff, UI comparison, screenshots' },
+    { id: 'dataQuality', icon: '📊', short: 'Data/ETL', name: 'Data/ETL Validation', description: 'Data pipelines, data quality, migration' }
   ];
 
   // Auth fetch helper with auto token refresh
@@ -93,20 +104,29 @@
   }
 
   onMount(async () => {
+    // Set when we're bouncing an unauthenticated visitor to '/' — `goto` is
+    // async, so the component keeps rendering for a frame after it's called.
+    // Leaving `loading` true until navigation actually completes keeps the
+    // template out of the authenticated branch, which otherwise dereferences
+    // `user.id` while `user` is still null and crashes.
+    let redirecting = false;
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
         const { data: { session: refreshed } } = await supabase.auth.refreshSession();
         if (!refreshed) {
-          goto('/');
+          redirecting = true;
+          await goto('/');
           return;
         }
       }
-      
+
       const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
       if (authError || !currentUser) {
-        goto('/');
+        redirecting = true;
+        await goto('/');
         return;
       }
       user = currentUser;
@@ -118,7 +138,7 @@
     } catch (err: any) {
       error = err.message;
     } finally {
-      loading = false;
+      if (!redirecting) loading = false;
     }
   });
 
@@ -292,12 +312,7 @@
     selectedTestDomain = domainId;
     activeTab = 'quick';
   }
-  
-  // Get domain display name
-  function getDomainDisplayName(domainId: TestDomainId): string {
-    const domain = testDomains.find(d => d.id === domainId);
-    return domain?.name || 'Functional Testing';
-  }
+
 </script>
 
 <svelte:head>
@@ -319,67 +334,54 @@
   {:else if error}
     <div class="error-state">{error}</div>
   {:else}
-    <!-- TEST CATEGORIES SECTION - MOVED TO TOP (above tabs) -->
-    <div class="test-categories-section">
-      <h2>🧪 Test Categories</h2>
-      <div class="categories-grid">
-        {#each testDomains as domain}
-          <button 
-            class="category-card" 
-            class:selected={selectedTestDomain === domain.id}
-            on:click={() => selectTestDomain(domain.id)}
-          >
-            <div class="category-icon">{domain.icon}</div>
-            <div class="category-info">
-              <h3>{domain.name}</h3>
-              <p>{domain.description}</p>
-            </div>
-            {#if selectedTestDomain === domain.id}
-              <div class="selected-check">✓</div>
-            {/if}
-          </button>
-        {/each}
+    <!-- PRIMARY ACTION: one focused panel for the thing you came here to do -->
+    <div class="action-panel">
+      <div class="tabs">
+        <button class="tab-btn" class:active={activeTab === 'quick'} on:click={() => activeTab = 'quick'}>⚡ Quick Generate</button>
+        <button class="tab-btn" class:active={activeTab === 'atrd'} on:click={() => activeTab = 'atrd'}>📄 Import ATRD</button>
+        <button class="tab-btn" class:active={activeTab === 'reports'} on:click={() => activeTab = 'reports'}>📊 Reports</button>
       </div>
-    </div>
 
-    <!-- TABS -->
-    <div class="tabs">
-      <button class="tab-btn" class:active={activeTab === 'quick'} on:click={() => activeTab = 'quick'}>⚡ Quick Generate</button>
-      <button class="tab-btn" class:active={activeTab === 'atrd'} on:click={() => activeTab = 'atrd'}>📄 Import ATRD Document</button>
-      <button class="tab-btn" class:active={activeTab === 'reports'} on:click={() => activeTab = 'reports'}>📊 Reports</button>
-    </div>
+      {#if activeTab === 'quick'}
+        <div class="tab-panel" in:fade={{ duration: 150 }}>
+          <!-- Domain picker lives here, where it's actually used — not as a
+               separate section competing for attention above the tabs. -->
+          <div class="domain-picker">
+            {#each testDomains as domain}
+              <button
+                type="button"
+                class="domain-chip"
+                class:selected={selectedTestDomain === domain.id}
+                on:click={() => selectTestDomain(domain.id)}
+                title={domain.description}
+              >
+                <span>{domain.icon}</span>
+                {domain.short}
+              </button>
+            {/each}
+          </div>
 
-    {#if activeTab === 'quick'}
-      <div class="generator-section">
-        <!-- Show selected domain context -->
-        <div class="domain-context">
-          <span class="domain-badge">
-            🧪 Generating tests for: <strong>{getDomainDisplayName(selectedTestDomain)}</strong>
-          </span>
+          <IntegratedTestGenerator userId={user.id} initialDomain={selectedTestDomain} />
         </div>
-        
-        <!-- Pass the selected domain to the generator -->
-        <IntegratedTestGenerator userId={user.id} initialDomain={selectedTestDomain} />
-        
-      </div>
-    {/if}
+      {/if}
 
-    {#if activeTab === 'atrd'}
-      <div class="generator-section">
-        <DynamicATRDParser on:requirementParsed={handleParsedRequirements} />
-        {#if atrdSaveMessage}
-          <div class="save-message {atrdSaving ? 'saving' : 'saved'}">{atrdSaveMessage}</div>
-        {/if}
-      </div>
-    {/if}
+      {#if activeTab === 'atrd'}
+        <div class="tab-panel" in:fade={{ duration: 150 }}>
+          <DynamicATRDParser on:requirementParsed={handleParsedRequirements} />
+          {#if atrdSaveMessage}
+            <div class="save-message {atrdSaving ? 'saving' : 'saved'}">{atrdSaveMessage}</div>
+          {/if}
+        </div>
+      {/if}
 
-    {#if activeTab === 'reports'}
-      <div class="generator-section">
-        <BusinessReportView />
-      </div>
-    {/if}
+      {#if activeTab === 'reports'}
+        <div class="tab-panel" in:fade={{ duration: 150 }}>
+          <BusinessReportView />
+        </div>
+      {/if}
+    </div>
 
-    <!-- Stats Grid -->
+    <!-- AT A GLANCE: compact, secondary to the action panel above -->
     <div class="stats-grid">
       <button class="stat-card" type="button" on:click={() => goto('/dashboard/sessions')}>
         <div class="stat-icon blue">🔄</div>
@@ -411,10 +413,14 @@
       </button>
     </div>
 
+    <!-- RECENT ACTIVITY: everything you've already done, grouped and labeled
+         so it reads as history, not more decisions to make. -->
+    <div class="activity-heading">Recent Activity</div>
+
     {#if recentPackages.length > 0}
       <div class="recent-packages">
         <div class="section-header">
-          <h2>📦 Recent Test Packages</h2>
+          <h2>📦 Test Packages</h2>
           <a href="/dashboard/packages" class="view-all">View All →</a>
         </div>
         <div class="packages-grid">
@@ -493,106 +499,70 @@
   .tabs { display: flex; gap: 0.5rem; margin-bottom: 2rem; border-bottom: 1px solid #e5e7eb; }
   .tab-btn { padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; font-size: 1rem; color: #6b7280; }
   .tab-btn.active { border-bottom-color: #667eea; color: #667eea; font-weight: 500; }
-  .generator-section { margin-bottom: 2rem; }
-  
-  .domain-context {
-    margin-bottom: 1rem;
-    padding: 0.75rem;
-    background: #f3f4f6;
-    border-radius: 0.5rem;
-    text-align: center;
+
+  /* Primary action panel — one focused card that holds the tabs + their content,
+     visually separated from the "at a glance" and "recent activity" sections below. */
+  .action-panel {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   }
-  
-  .domain-badge {
-    font-size: 0.875rem;
+  .action-panel .tabs { margin-bottom: 1.5rem; }
+  .tab-panel { min-height: 4rem; }
+
+  .domain-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .domain-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.85rem;
+    background: #f9fafb;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 0.8125rem;
     color: #374151;
+    transition:
+      border-color 0.15s,
+      background 0.15s,
+      color 0.15s;
   }
-  
+
+  .domain-chip:hover {
+    border-color: #a5b4fc;
+  }
+
+  .domain-chip.selected {
+    background: #667eea;
+    border-color: #667eea;
+    color: white;
+    font-weight: 500;
+  }
+
   .save-message { margin-top: 1rem; padding: 0.75rem; border-radius: 0.375rem; text-align: center; }
   .save-message.saving { background: #dbeafe; color: #1e40af; }
   .save-message.saved { background: #d1fae5; color: #065f46; }
-  
-  /* Test Categories Section */
-  .test-categories-section {
-    margin-bottom: 2rem;
-  }
-  
-  .test-categories-section h2 {
-    font-size: 1.125rem;
-    margin-bottom: 1rem;
-    color: #1f2937;
-  }
-  
-  .categories-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1rem;
-  }
-  
-  .category-card {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem;
-    background: white;
-    border: 2px solid #e5e7eb;
-    border-radius: 0.5rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    width: 100%;
-    text-align: left;
-  }
-  
-  .category-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-    border-color: #667eea;
-  }
-  
-  .category-card.selected {
-    border-color: #667eea;
-    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
-  }
-  
-  .category-icon {
-    font-size: 2rem;
-  }
-  
-  .category-info {
-    flex: 1;
-  }
-  
-  .category-info h3 {
-    margin: 0 0 0.25rem 0;
-    font-size: 0.875rem;
+
+  .activity-heading {
+    font-size: 0.8125rem;
     font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #9ca3af;
+    margin-bottom: 1rem;
   }
-  
-  .category-info p {
-    margin: 0;
-    font-size: 0.75rem;
-    color: #6b7280;
-  }
-  
-  .selected-check {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    width: 20px;
-    height: 20px;
-    background: #667eea;
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    font-weight: bold;
-  }
-  
-  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 2rem; }
-  .stat-card { background: white; padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 1rem; cursor: pointer; transition: transform 0.2s; border: none; width: 100%; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: white; padding: 1rem 1.25rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 0.75rem; cursor: pointer; transition: transform 0.2s; border: none; width: 100%; }
   .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
   .stat-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
   .stat-icon.blue { background: #dbeafe; color: #1e40af; }
@@ -635,12 +605,12 @@
   .empty-message { text-align: center; color: #6b7280; padding: 2rem; }
   .loading-state, .error-state { text-align: center; padding: 3rem; }
   
-  @media (max-width: 768px) { 
-    .dashboard { padding: 1rem; } 
-    .stats-grid { grid-template-columns: 1fr; } 
-    .packages-grid { grid-template-columns: 1fr; } 
-    .content-grid { grid-template-columns: 1fr; } 
+  @media (max-width: 768px) {
+    .dashboard { padding: 1rem; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .packages-grid { grid-template-columns: 1fr; }
+    .content-grid { grid-template-columns: 1fr; }
     .tabs { flex-wrap: wrap; }
-    .categories-grid { grid-template-columns: 1fr; }
+    .action-panel { padding: 1rem; }
   }
 </style>

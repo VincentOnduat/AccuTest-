@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { getUserFromRequest } from '$lib/server/auth';
+import { runPlaywrightCode, REAL_EXECUTION_FRAMEWORKS } from '$lib/server/testRunner';
 
 export async function POST({ request, cookies }) {
   try {
@@ -32,10 +33,7 @@ export async function POST({ request, cookies }) {
       .eq('type', session.type);
 
     if (!tests || tests.length === 0) {
-      const { data: allTests } = await auth.supabase
-        .from('tests')
-        .select('*')
-        .eq('user_id', auth.user.id);
+      const { data: allTests } = await auth.supabase.from('tests').select('*').eq('user_id', auth.user.id);
       tests = allTests || [];
     }
 
@@ -47,14 +45,41 @@ export async function POST({ request, cookies }) {
     // relationship to `tests` that doesn't exist in the schema), which is a
     // separate, pre-existing issue beyond this endpoint. This just records the
     // run's outcome on the session row itself, which the schema does support.
+    const { data: profile } = await auth.supabase.from('profiles').select('target_url').eq('id', auth.user.id).single();
+    const baseUrl = profile?.target_url || undefined;
+
     const startTime = Date.now();
     let passedCount = 0;
     let failedCount = 0;
+    let skippedCount = 0;
+    const logLines: string[] = [];
 
-    for (const _test of tests) {
-      const passed = Math.random() > 0.2; // simulated execution, same convention as /api/test-runner
-      if (passed) passedCount++;
-      else failedCount++;
+    for (const t of tests) {
+      const framework = t.framework || 'playwright';
+      const code: string = t.code || '';
+
+      if (!code.trim() || !REAL_EXECUTION_FRAMEWORKS.has(framework)) {
+        // Honest: nothing to actually run (no code, or a framework we don't
+        // execute for real yet) — mark it skipped instead of faking a result.
+        skippedCount++;
+        logLines.push(`⏭️ ${t.name}: skipped (${!code.trim() ? 'no code' : `execution not supported for "${framework}"`})`);
+        continue;
+      }
+
+      const run = await runPlaywrightCode(code, { baseUrl });
+      if (run.status === 'error') {
+        skippedCount++;
+        logLines.push(`⚠️ ${t.name}: run failed to complete (${run.rawError?.split('\n')[0] || 'unknown error'})`);
+        continue;
+      }
+
+      const anyFailed = run.results.some((r) => r.status === 'failed' || r.status === 'timedOut');
+      if (anyFailed) {
+        failedCount++;
+      } else {
+        passedCount++;
+      }
+      logLines.push(`${anyFailed ? '❌' : '✅'} ${t.name}: ${anyFailed ? 'failed' : 'passed'} (${run.duration}ms)`);
     }
 
     const totalDuration = Date.now() - startTime;
@@ -69,11 +94,13 @@ export async function POST({ request, cookies }) {
         test_count: tests.length,
         passed_tests: passedCount,
         failed_tests: failedCount,
-        skipped_tests: 0,
+        skipped_tests: skippedCount,
         duration: totalDuration,
         end_time: nowIso,
         completed_at: nowIso,
-        logs: `Ran ${tests.length} test(s): ${passedCount} passed, ${failedCount} failed.`
+        logs:
+          `Ran ${tests.length} test(s): ${passedCount} passed, ${failedCount} failed, ${skippedCount} skipped.\n` +
+          logLines.join('\n')
       })
       .eq('id', sessionId)
       .eq('user_id', auth.user.id);
@@ -90,6 +117,7 @@ export async function POST({ request, cookies }) {
         total: tests.length,
         passed: passedCount,
         failed: failedCount,
+        skipped: skippedCount,
         duration: totalDuration
       }
     });
