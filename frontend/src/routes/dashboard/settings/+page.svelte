@@ -149,7 +149,7 @@
             <h2>Testing</h2>
 
             <div class="form-group">
-              <label for="target_url">Target Application URL</label>
+              <label for="target_url">Default Target Application URL</label>
               <input
                 type="url"
                 id="target_url"
@@ -160,7 +160,10 @@
                 Real test execution runs generated Playwright code against this URL — it's used
                 as the base for relative <code>page.goto()</code> / <code>request.get()</code>
                 calls in generated tests. Leave blank and those calls will fail with a navigation
-                error, which is expected until you point this at an app.
+                error, which is expected until you point this at an app. This is just the default:
+                any test package with its own "Website to test" set at generation time uses that
+                instead. Only public URLs are accepted — internal/private addresses are rejected
+                when a test actually runs.
               </p>
             </div>
           </section>

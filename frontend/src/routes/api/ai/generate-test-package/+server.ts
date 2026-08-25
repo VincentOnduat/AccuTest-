@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+import { assertSafeTargetUrl, UnsafeTargetUrlError } from '$lib/server/targetUrl';
 
 export async function POST({ request }) {
   console.log('🔵 Generate Test Package API called');
@@ -30,15 +31,33 @@ export async function POST({ request }) {
     }
     
     const body = await request.json();
-    const { document, name, framework = 'playwright', testDomain = 'functional', atrdId } = body;
+    const { document, name, framework = 'playwright', testDomain = 'functional', atrdId, targetUrl } = body;
 
     console.log('🔍 DEBUG - Received testDomain:', testDomain);
     console.log('🔍 DEBUG - Full body:', JSON.stringify(body, null, 2));
-    
+
     if (!document) {
       return json({ error: 'Missing document' }, { status: 400 });
     }
-    
+
+    // The website this package tests, e.g. a live site the user wants
+    // AccuTest to actually drive a browser against. Optional here — a
+    // package without one falls back to the account-wide default in
+    // Settings at run time (see api/test-runner) — but if given, it's
+    // validated up front so the user gets an immediate, clear error instead
+    // of a confusing failure the first time they run the package.
+    let normalizedTargetUrl: string | null = null;
+    if (typeof targetUrl === 'string' && targetUrl.trim()) {
+      try {
+        normalizedTargetUrl = (await assertSafeTargetUrl(targetUrl.trim())).toString();
+      } catch (err) {
+        if (err instanceof UnsafeTargetUrlError) {
+          return json({ error: err.message }, { status: 400 });
+        }
+        throw err;
+      }
+    }
+
     console.log(`🟢 Generating test code for domain: ${testDomain}`);
     console.log(`📝 Document: ${document.substring(0, 100)}`);
     
@@ -92,7 +111,8 @@ console.log(`🔧 Framework: ${framework}, testCode length: ${testCode.length}`)
         description: `Generated from: ${document.substring(0, 100)}`,
         test_cases: testPackage,
         status: 'draft',
-        ...(atrdId ? { atrd_id: atrdId } : {})
+        ...(atrdId ? { atrd_id: atrdId } : {}),
+        ...(normalizedTargetUrl ? { target_url: normalizedTargetUrl } : {})
       })
       .select()
       .single();
@@ -325,14 +345,37 @@ test.describe('API Tests', () => {
 `;
   }
   
-  // Default - always return something
+  // Default: a real browser smoke test against whatever URL the package is
+  // configured to run against (see `target_url` / Settings' "Target
+  // Application URL"). Unlike the domain-specific generators above, this
+  // doesn't assume anything about the site's structure — no app-specific
+  // selectors — so it's the one that actually works against an arbitrary
+  // remote site the user hands us a URL for, not just a canned scenario.
   return `
 import { test, expect } from '@playwright/test';
 
-test.describe('Generated Tests', () => {
-  test('Verify functionality works', async ({ page }) => {
-    console.log('Test generated for: ${document.substring(0, 100)}');
-    expect(true).toBe(true);
+test.describe('Site Smoke Tests', () => {
+  test('Homepage loads successfully', async ({ page }) => {
+    const response = await page.goto('/');
+    expect(response?.ok(), \`Expected a successful response, got \${response?.status()}\`).toBeTruthy();
+    await expect(page).toHaveTitle(/.+/);
+  });
+
+  test('Homepage has no failed network requests', async ({ page }) => {
+    const failures: string[] = [];
+    page.on('requestfailed', (req) => failures.push(\`\${req.method()} \${req.url()} — \${req.failure()?.errorText}\`));
+    await page.goto('/', { waitUntil: 'networkidle' });
+    expect(failures, failures.join('\\n')).toHaveLength(0);
+  });
+
+  test('Homepage has no browser console errors', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await page.goto('/');
+    expect(errors, errors.join('\\n')).toHaveLength(0);
   });
 });
 `;
@@ -560,13 +603,22 @@ function extractTestCasesFromDocument(document: string, testDomain: string): any
       }
     );
   } else {
-    testCases.push({
-      name: "Verify functionality",
-      description: `Verify that ${document.substring(0, 50)} works correctly`,
-      priority: "Critical",
-      steps: ["Execute test scenario", "Verify expected behavior"],
-      expectedResult: "Functionality works as expected"
-    });
+    testCases.push(
+      {
+        name: "Homepage loads successfully",
+        description: "Verify the site responds with a successful status and renders a real page title",
+        priority: "Critical",
+        steps: ["Navigate to the homepage", "Check the response status", "Check the page title"],
+        expectedResult: "Page loads with a 2xx/3xx response and a non-empty title"
+      },
+      {
+        name: "No failed requests or console errors",
+        description: "Verify the homepage loads without failed network requests or JavaScript errors",
+        priority: "High",
+        steps: ["Navigate to the homepage", "Monitor network requests", "Monitor console output"],
+        expectedResult: "No failed requests and no console errors"
+      }
+    );
   }
   
   return testCases;
