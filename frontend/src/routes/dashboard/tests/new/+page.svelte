@@ -44,7 +44,7 @@
         goto(`/dashboard/tests/${data[0].id}`);
       }
     } catch (err) {
-      error = err.message;
+      error = err instanceof Error ? err.message : String(err);
     } finally {
       loading = false;
     }

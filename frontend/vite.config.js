@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
@@ -12,5 +13,9 @@ export default defineConfig({
     // container's localhost:5173. Outside Codespaces, leave hmr unset so
     // protocol/host auto-detect from window.location as usual.
     hmr: process.env.CODESPACES ? { clientPort: 443 } : undefined
+  },
+  test: {
+    environment: 'node',
+    include: ['tests/**/*.test.ts']
   }
 });

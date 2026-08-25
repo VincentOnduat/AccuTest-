@@ -21,7 +21,7 @@
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) {
-        goto('/');
+        goto('/login');
         return;
       }
       user = currentUser;

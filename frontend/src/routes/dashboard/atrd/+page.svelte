@@ -109,7 +109,13 @@
     <div style="display: flex; flex-direction: column; gap: 1rem;">
       {#each atrds as atrd}
         <div style="display: flex; justify-content: space-between; align-items: center; background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1rem; transition: box-shadow 0.2s;">
-          <div style="flex: 1; display: flex; align-items: center; gap: 1rem; cursor: pointer;" on:click={() => viewATRD(atrd)}>
+          <div
+            role="button"
+            tabindex="0"
+            style="flex: 1; display: flex; align-items: center; gap: 1rem; cursor: pointer;"
+            on:click={() => viewATRD(atrd)}
+            on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && viewATRD(atrd)}
+          >
             <span style="font-size: 2rem;">📄</span>
             <div>
               <h3 style="margin: 0 0 0.25rem 0; color: #1f2937; font-size: 1rem;">{atrd.name}</h3>

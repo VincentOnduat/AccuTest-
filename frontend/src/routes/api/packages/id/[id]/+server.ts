@@ -1,10 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { getUserFromRequest } from '$lib/server/auth';
 
-// NOTE: the FastAPI backend (backend/app/routers/packages.py) only implements
-// GET /api/packages/list — there's no single-package fetch/delete route there.
-// This talks to Supabase directly instead, matching how /api/atrd/[id] and
-// /api/packages work.
+// Talks to Supabase directly, matching how /api/atrd/[id] and /api/packages work.
 
 export async function GET({ params, request, cookies }) {
   try {

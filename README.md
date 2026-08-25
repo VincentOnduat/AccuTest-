@@ -1,3 +1,5 @@
+
+
 # 🎯 AccuTest
 
 ## AI-Powered Precision Test Automation
@@ -8,7 +10,7 @@
     <img src="https://github.com/VincentOnduat/AccuTest/actions/workflows/main.yml/badge.svg" alt="CI/CD">
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License">
+    <img src="https://img.shields.io/badge/License-Proprietary-blue.svg" alt="License">
   </a>
   <a href="https://kit.svelte.dev/">
     <img src="https://img.shields.io/badge/SvelteKit-2.0-FF3E00.svg?logo=svelte" alt="SvelteKit">
@@ -19,8 +21,8 @@
   <a href="https://supabase.com/">
     <img src="https://img.shields.io/badge/Supabase-3ECF8E.svg?logo=supabase" alt="Supabase">
   </a>
-  <a href="https://fastapi.tiangolo.com/">
-    <img src="https://img.shields.io/badge/FastAPI-0.104-009688.svg?logo=fastapi" alt="FastAPI">
+  <a href="https://playwright.dev/">
+    <img src="https://img.shields.io/badge/Playwright-2EAD33.svg?logo=playwright" alt="Playwright">
   </a>
 </p>
 
@@ -45,10 +47,11 @@
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| 🔐 User Authentication | ✅ | Supabase auth with email/password |
+| 🔐 User Authentication | ✅ | Supabase auth with email/password, self-serve sign up |
 | 📋 ATRD Management | ✅ | Create, view, parse, and delete ATRD documents |
 | 🤖 AI Test Generation | ✅ | Generate tests for 6 domains (Functional, Performance, Security, Accessibility, Visual, Data/ETL) |
 | 🧪 Test Packages | ✅ | Create and manage test packages with automated code |
+| ▶️ Test Execution | ✅ | Real execution of generated Playwright test code against a configurable target URL, with real pass/fail results |
 | 📊 Dashboard Analytics | ✅ | Real-time stats, recent sessions, tasks, and packages |
 | 🔄 Test Sessions | ✅ | Create and manage test execution sessions |
 | ✅ Task Management | ✅ | Create and track tasks with priority levels |
@@ -60,10 +63,9 @@
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| 🧪 Test Execution | 🚧 | Running actual test suites |
+| 🧪 Cypress/Jest Execution | 🚧 | Real execution currently covers Playwright-family generated code only; Cypress/Jest packages generate code but report as "execution not yet supported" rather than a fabricated result |
 | 📈 Business Reports | 🚧 | Advanced analytics and reporting |
 | 🔔 Notifications | 🚧 | Email and webhook notifications |
-| 🚀 CI/CD Pipeline | 🚧 | Automated testing and deployment |
 
 ## 🛠️ Tech Stack
 
@@ -75,11 +77,11 @@
 - **API Client**: Supabase JS SDK
 
 ### Backend
-- **API Framework**: FastAPI (Python 3.14)
+- **API Framework**: SvelteKit server routes (`src/routes/api/*`) — no separate backend service
 - **Database**: Supabase PostgreSQL
 - **Auth**: Supabase Auth (JWT)
 - **AI Integration**: OpenAI GPT Models
-- **Test Frameworks**: Playwright, Cypress, Jest, k6
+- **Test Frameworks**: Playwright (code generation + real execution), Cypress, Jest, k6 (code generation only)
 
 ### Infrastructure
 - **Hosting**: Vercel / Supabase
@@ -90,26 +92,22 @@
 
 ```
 AccuTest-/
-├── backend/                  # FastAPI service
-│   └── app/
-│       ├── main.py           # App entrypoint, CORS, router registration
-│       ├── config.py         # Settings (Supabase, OpenAI, etc.)
-│       ├── dependencies.py   # Shared FastAPI dependencies (auth, client)
-│       ├── routers/          # auth, tasks, atrd, packages
-│       ├── services/         # Business logic (e.g. automator)
-│       └── utils/
-├── frontend/                  # SvelteKit app
+├── frontend/                  # SvelteKit app (frontend + backend API routes)
 │   ├── src/
 │   │   ├── routes/
+│   │   │   ├── (marketing)/  # Public landing page and pricing
+│   │   │   ├── login/        # Sign in
+│   │   │   ├── signup/       # Self-serve sign up
 │   │   │   ├── dashboard/    # UI: atrd, packages, tasks, sessions,
-│   │   │   │                 #     tests, analytics, business-tests,
-│   │   │   │                 #     test-execution, profile, settings
+│   │   │   │                 #     tests, analytics, test-execution,
+│   │   │   │                 #     profile, settings
 │   │   │   └── api/          # SvelteKit API routes: ai, atrd, auth,
 │   │   │                     #     packages, reports, business-reports,
 │   │   │                     #     test-executions, test-runner,
 │   │   │                     #     notifications, health
-│   │   ├── lib/               # components, stores, server, supabase.ts
+│   │   ├── lib/               # components, stores, server (auth, testRunner), supabase.ts
 │   │   └── hooks.server.ts
+│   ├── tests/                 # Vitest unit tests
 │   └── migrations/            # Supabase SQL migrations
 └── package.json                # Root workspace scripts (proxies to frontend)
 ```
@@ -117,8 +115,7 @@ AccuTest-/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+
-- Python 3.11+ (backend targets 3.14)
+- Node.js 20+
 - A [Supabase](https://supabase.com/) project (URL + anon/service keys)
 - An [OpenAI](https://platform.openai.com/) API key
 
@@ -129,44 +126,25 @@ git clone https://github.com/VincentOnduat/AccuTest-.git
 cd AccuTest-
 ```
 
-### 2. Frontend setup
+### 2. Install and run
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env   # then fill in your Supabase URL/keys
+npx playwright install --with-deps chromium   # needed for real test execution
+cp .env.example .env   # then fill in your Supabase + OpenAI keys
 npm run dev
 ```
 
-The app runs at `http://localhost:5173`.
-
-### 3. Backend setup
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env       # then fill in Supabase + OpenAI credentials
-uvicorn app.main:app --reload
-```
-
-The API runs at `http://localhost:8000` (interactive docs at `/docs`).
+The app runs at `http://localhost:5173`. There is no separate backend service — all
+server-side logic (auth, AI generation, and real test execution) runs inside
+SvelteKit's own server routes.
 
 > ⚠️ Never commit `.env` files or paste real API keys into chat/commits — set them directly in your local `.env`.
 
 ## 🔌 API Endpoints
 
-The FastAPI backend exposes routers under the following prefixes (see `/docs` for the full interactive spec):
-
-| Prefix | Router | Purpose |
-|--------|--------|---------|
-| `/auth` | `auth.py` | Authentication (Supabase-backed) |
-| `/tasks` | `tasks.py` | Create, list, and update automation tasks |
-| `/api/atrd` | `atrd.py` | Upload/parse ATRD documents, link generated tasks |
-| `/api/packages` | `packages.py` | Manage generated test packages |
-
-The SvelteKit frontend also serves its own internal API routes under `/api/*` (e.g. `ai/generate-test-package`, `ai/parse-atrd`, `atrd/*`, `packages/*`, `reports/*`, `business-reports/*`, `test-executions/*`, `test-runner`, `notifications`, `health`) that proxy to Supabase and OpenAI directly from the server.
+The SvelteKit app serves its own server routes under `/api/*` (e.g. `ai/generate-test-package`, `ai/parse-atrd`, `atrd/*`, `packages/*`, `reports/*`, `business-reports/*`, `test-executions/*`, `test-runner`, `notifications`, `health`) that talk to Supabase and OpenAI directly from the server — see `frontend/src/routes/api/`.
 
 ## 🗄️ Database Schema
 
@@ -188,4 +166,4 @@ SQL migrations live in `frontend/migrations/`. Row-level security policies and f
 
 ## 📄 License
 
-Licensed under **AGPL v3**. See [`LICENSE`](LICENSE) for details.
+Proprietary. All rights reserved. See [`LICENSE`](LICENSE) for details.

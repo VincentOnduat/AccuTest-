@@ -293,7 +293,7 @@
 
 <div class="ai-generator">
   <div class="generator-header">
-    <h3>{currentDomain.icon} AI Test Package Generator</h3>
+    <h3>{currentDomain.icon} Test Package Generator</h3>
     <p class="subtitle">{currentDomain.description}</p>
     <div class="domain-context-badge">
       <span>🎯 Generating for: <strong>{currentDomain.label}</strong></span>
