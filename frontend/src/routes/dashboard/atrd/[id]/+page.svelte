@@ -34,18 +34,22 @@
   let saving = false;
   let testPackages: any[] = [];
   let showTestPackages = false;
-  
+  // Pre-filled from whatever URL the ATRD parser found in the document
+  // (see atrdParser.ts's detectUrls) — editable before generating, and left
+  // blank falls back to the account's default Target Application URL.
+  let targetUrl = '';
+
   $: id = $page.params.id;
-  
+
   onMount(async () => {
     await loadATRD();
     await loadTestPackages();
   });
-  
+
   async function loadATRD() {
     loading = true;
     error = '';
-    
+
     try {
       const response = await authFetch(`/api/atrd/${id}`);
 
@@ -53,6 +57,7 @@
         atrd = await response.json();
         editName = atrd.name;
         editContent = JSON.parse(JSON.stringify(atrd.content));
+        targetUrl = atrd.content?.metadata?.detectedUrl || '';
         console.log('Loaded ATRD:', atrd);
       } else if (response.status === 404) {
         error = 'ATRD not found';
@@ -111,7 +116,7 @@
   
   async function generateTestPackage() {
     if (!atrd) return;
-    
+
     try {
       const response = await authFetch('/api/ai/generate-test-package', {
         method: 'POST',
@@ -119,17 +124,19 @@
           atrdId: atrd.id,
           document: JSON.stringify(atrd.content),
           testDomain: atrd.domain,
-          name: `${atrd.name} - Test Package`
+          name: `${atrd.name} - Test Package`,
+          targetUrl: targetUrl.trim() || undefined
         })
       });
-      
+
       if (response.ok) {
         const result = await response.json();
         alert(`✅ Test package generated! ID: ${result.id}`);
         await loadTestPackages();
         showTestPackages = true;
       } else {
-        alert('Failed to generate test package');
+        const result = await response.json().catch(() => null);
+        alert(result?.error || 'Failed to generate test package');
       }
     } catch (err) {
       console.error('Generation error:', err);
@@ -314,6 +321,20 @@
           {#if atrd.updated_at !== atrd.created_at}
             <span class="badge">✏️ Updated: {formatDate(atrd.updated_at)}</span>
           {/if}
+        </div>
+        <div class="target-url-field">
+          <label for="atrd-target-url">
+            🌐 Website to test
+            {#if atrd.content?.metadata?.detectedUrl}
+              <span class="detected-note">— found in this document</span>
+            {/if}
+          </label>
+          <input
+            id="atrd-target-url"
+            type="url"
+            bind:value={targetUrl}
+            placeholder="https://your-app.example.com (defaults to Settings if blank)"
+          />
         </div>
       </div>
       <div class="actions">
@@ -560,7 +581,33 @@
     font-size: 0.75rem;
     color: #4b5563;
   }
-  
+
+  .target-url-field {
+    margin-top: 0.75rem;
+    max-width: 28rem;
+  }
+
+  .target-url-field label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #4b5563;
+    margin-bottom: 0.25rem;
+  }
+
+  .detected-note {
+    font-weight: 400;
+    color: #059669;
+  }
+
+  .target-url-field input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+  }
+
   .actions {
     display: flex;
     gap: 0.5rem;

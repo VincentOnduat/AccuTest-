@@ -283,7 +283,10 @@
       const saveResult = await saveResponse.json();
       
       if (saveResult.success) {
-        atrdSaveMessage = `✅ ATRD saved successfully! ID: ${saveResult.id}`;
+        const detectedUrl = data.metadata?.detectedUrl;
+        atrdSaveMessage = detectedUrl
+          ? `✅ ATRD saved! Found "${detectedUrl}" in the document — it'll be pre-filled as the site to test.`
+          : `✅ ATRD saved successfully! ID: ${saveResult.id}`;
         await fetchRecentATRDs();
         
         setTimeout(() => {
