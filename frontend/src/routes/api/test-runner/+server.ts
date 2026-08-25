@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { createServerClient } from '@supabase/ssr';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
 import { runPlaywrightCode, REAL_EXECUTION_FRAMEWORKS } from '$lib/server/testRunner';
+import { assertSafeTargetUrl, UnsafeTargetUrlError } from '$lib/server/targetUrl';
 
 export async function POST({ request, cookies }) {
   try {
@@ -52,10 +53,28 @@ export async function POST({ request, cookies }) {
       return json({ error: 'This package has no generated code to execute.' }, { status: 400 });
     }
 
-    // Look up the target URL the user configured in Settings, if any.
+    // A package can target its own remote website (set at generation time);
+    // otherwise fall back to the account-wide default from Settings.
     const { data: profile } = await supabase.from('profiles').select('target_url').eq('id', user.id).single();
+    const targetUrlRaw: string | undefined = pkg.target_url || profile?.target_url || undefined;
 
-    const run = await runPlaywrightCode(code, { baseUrl: profile?.target_url || undefined });
+    // Re-validate here regardless of where the URL came from — this is the
+    // one place that actually launches a browser against it, so it's the
+    // choke point that has to hold even if something upstream (a direct API
+    // call, a stale saved value) skipped validation. See targetUrl.ts.
+    let baseUrl: string | undefined;
+    if (targetUrlRaw) {
+      try {
+        baseUrl = (await assertSafeTargetUrl(targetUrlRaw)).toString();
+      } catch (err) {
+        if (err instanceof UnsafeTargetUrlError) {
+          return json({ error: err.message }, { status: 400 });
+        }
+        throw err;
+      }
+    }
+
+    const run = await runPlaywrightCode(code, { baseUrl });
 
     // A package that's actually been executed at least once is no longer just
     // a "draft" — flip it once, regardless of the run's outcome. (Never

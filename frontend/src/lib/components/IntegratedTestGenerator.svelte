@@ -21,6 +21,7 @@
 
   // State
   let testPrompt = '';
+  let targetUrl = '';
   let testDomain: DomainKey = initialDomain;
   let testType = 'ui';
   let framework = 'playwright';
@@ -201,12 +202,14 @@
           testDomain: testDomain,
           testType: testType,
           framework: framework,
+          targetUrl: targetUrl.trim() || undefined,
           userId
         })
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to generate test package (${response.status})`);
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || `Failed to generate test package (${response.status})`);
       }
 
       const result = await response.json();
@@ -327,6 +330,21 @@
         ></textarea>
       </div>
 
+      <div class="form-group">
+        <label for="targetUrl">Website to test (optional)</label>
+        <input
+          id="targetUrl"
+          type="url"
+          bind:value={targetUrl}
+          placeholder="https://your-app.example.com"
+          disabled={generating}
+        />
+        <p class="field-hint">
+          AccuTest will run the generated Playwright tests against this real site. Leave blank to use the
+          "Target Application URL" from Settings instead.
+        </p>
+      </div>
+
       <div class="form-row">
         <div class="form-group">
           <label for="testType">Test Type</label>
@@ -363,7 +381,12 @@
   {:else}
     <div class="results-section">
       <div class="results-header">
-        <h4>Generated Test Package</h4>
+        <div>
+          <h4>Generated Test Package</h4>
+          {#if targetUrl.trim()}
+            <p class="field-hint">🌐 Targets: {targetUrl.trim()}</p>
+          {/if}
+        </div>
         <div class="results-actions">
           <button class="action-btn" on:click={resetForm}>🔄 New</button>
         </div>
@@ -485,7 +508,7 @@
     margin-bottom: 0.5rem;
   }
 
-  textarea, select {
+  textarea, select, input[type="url"] {
     width: 100%;
     padding: 0.75rem;
     border: 1px solid #d1d5db;
@@ -493,6 +516,12 @@
     font-size: 0.875rem;
     font-family: inherit;
     background: white;
+  }
+
+  .field-hint {
+    margin: 0.375rem 0 0 0;
+    font-size: 0.75rem;
+    color: #6b7280;
   }
 
   .form-row {
