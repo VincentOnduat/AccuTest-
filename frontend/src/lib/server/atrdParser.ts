@@ -21,6 +21,10 @@ export interface ParsedATRD {
     domain: string;
     parsedAt: string;
     format: 'structured' | 'plain-text';
+    /** Best-guess app URL mentioned in the document, if any — see detectUrls(). */
+    detectedUrl: string | null;
+    /** Every distinct URL found in the document, in order of first appearance. */
+    detectedUrls: string[];
   };
   sections: ParsedSection[];
   rawContent: string;
@@ -105,13 +109,17 @@ export function parseATRDContent(content: string): ParsedATRD {
     sections.push(currentSection);
   }
 
+  const { detectedUrl, detectedUrls } = detectUrls(content);
+
   // If no structured sections found, treat as plain text
   if (sections.length === 0) {
     return {
       metadata: {
         domain: 'general',
         parsedAt: new Date().toISOString(),
-        format: 'plain-text'
+        format: 'plain-text',
+        detectedUrl,
+        detectedUrls
       },
       sections: [
         {
@@ -135,11 +143,58 @@ export function parseATRDContent(content: string): ParsedATRD {
     metadata: {
       domain: detectDomain(content),
       parsedAt: new Date().toISOString(),
-      format: 'structured'
+      format: 'structured',
+      detectedUrl,
+      detectedUrls
     },
     sections,
     rawContent: content
   };
+}
+
+const URL_PATTERN = /https?:\/\/[^\s"'<>()[\]]+/gi;
+// A line mentioning one of these words alongside a URL is very likely
+// declaring "this is the app/environment under test", as opposed to a URL
+// that's just incidental to a requirement (a doc link, a reference, etc.).
+const URL_LABEL_PATTERN = /\b(url|target|environment|app|website|site|endpoint|staging|production|host)\b/i;
+
+function cleanUrlMatch(raw: string): string {
+  // Strip trailing punctuation a URL regex commonly sweeps up when the URL
+  // sits at the end of a sentence or inside parentheses/quotes, e.g.
+  // "see https://app.example.com." or "(https://app.example.com)".
+  return raw.replace(/[)\].,;:'"]+$/, '');
+}
+
+/**
+ * Scans an ATRD document's raw text for URLs, so a URL the author already
+ * wrote down (a staging link, an "App URL:" line, an environment table) can
+ * be offered as the target to actually run generated tests against, instead
+ * of the user having to retype it. Returns every distinct URL found plus a
+ * best-effort single pick: a URL on a line that also mentions a word like
+ * "url"/"environment"/"staging" is preferred over one with no such context.
+ */
+export function detectUrls(content: string): { detectedUrl: string | null; detectedUrls: string[] } {
+  const detectedUrls: string[] = [];
+  const seen = new Set<string>();
+  let labeledUrl: string | null = null;
+
+  for (const line of content.split('\n')) {
+    const matches = line.match(URL_PATTERN);
+    if (!matches) continue;
+
+    for (const raw of matches) {
+      const url = cleanUrlMatch(raw);
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      detectedUrls.push(url);
+
+      if (!labeledUrl && URL_LABEL_PATTERN.test(line.replace(url, ''))) {
+        labeledUrl = url;
+      }
+    }
+  }
+
+  return { detectedUrl: labeledUrl || detectedUrls[0] || null, detectedUrls };
 }
 
 // Simple domain detection
