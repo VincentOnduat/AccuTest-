@@ -95,7 +95,7 @@ AccuTest-/
 ├── frontend/                  # SvelteKit app (frontend + backend API routes)
 │   ├── src/
 │   │   ├── routes/
-│   │   │   ├── (marketing)/  # Public landing page and pricing
+│   │   │   ├── +page.svelte  # Public landing page (root route, no route group)
 │   │   │   ├── login/        # Sign in
 │   │   │   ├── signup/       # Self-serve sign up
 │   │   │   ├── dashboard/    # UI: atrd, packages, tasks, sessions,
@@ -103,13 +103,15 @@ AccuTest-/
 │   │   │   │                 #     profile, settings
 │   │   │   └── api/          # SvelteKit API routes: ai, atrd, auth,
 │   │   │                     #     packages, reports, business-reports,
-│   │   │                     #     test-executions, test-runner,
+│   │   │                     #     test-executions, test-runner, run-session,
 │   │   │                     #     notifications, health
 │   │   ├── lib/               # components, stores, server (auth, testRunner), supabase.ts
 │   │   └── hooks.server.ts
 │   ├── tests/                 # Vitest unit tests
 │   └── migrations/            # Supabase SQL migrations
-└── package.json                # Root workspace scripts (proxies to frontend)
+└── package.json                # Stale duplicate from before the SvelteKit app
+                                 # moved into frontend/ — not used to run the
+                                 # app; see frontend/package.json instead
 ```
 
 ## 🚀 Quick Start
