@@ -64,8 +64,8 @@
 | Feature | Status | Description |
 |---------|--------|-------------|
 | 🧪 Cypress/Jest Execution | 🚧 | Real execution currently covers Playwright-family generated code only; Cypress/Jest packages generate code but report as "execution not yet supported" rather than a fabricated result |
-| 📈 Business Reports | 🚧 | Advanced analytics and reporting |
-| 🔔 Notifications | 🚧 | Email and webhook notifications |
+| 📈 Business Reports | 🚧 | Basic pass/fail rollups (totals, pass rate, critical-issue count, an auto-generated summary) are generated from real execution data and persisted — advanced analytics, export, and scheduling are not yet built |
+| 🔔 Notifications | 🚧 | Execution notifications are logged to the database, but email/webhook delivery is simulated — no real send provider is wired up yet |
 
 ## 🛠️ Tech Stack
 
