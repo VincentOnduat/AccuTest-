@@ -6,8 +6,8 @@
 
 <!-- BADGES -->
 <p align="center">
-  <a href="https://github.com/VincentOnduat/AccuTest/actions/workflows/main.yml">
-    <img src="https://github.com/VincentOnduat/AccuTest/actions/workflows/main.yml/badge.svg" alt="CI/CD">
+  <a href="https://github.com/VincentOnduat/AccuTest-/actions/workflows/main.yml">
+    <img src="https://github.com/VincentOnduat/AccuTest-/actions/workflows/main.yml/badge.svg" alt="CI/CD">
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-Proprietary-blue.svg" alt="License">
