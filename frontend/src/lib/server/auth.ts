@@ -18,7 +18,6 @@ export async function getUserFromRequest(request: Request, cookies?: import('@sv
 
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
-    console.log('🔑 Token received, length:', token.length);
 
     const supabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -27,11 +26,9 @@ export async function getUserFromRequest(request: Request, cookies?: import('@sv
 
     const { data: { user }, error } = await supabase.auth.getUser();
     if (error || !user) {
-      console.log('❌ Token validation error:', error?.message);
       return null;
     }
 
-    console.log('✅ User authenticated:', user.email);
     return { user, supabase };
   }
 
@@ -46,14 +43,11 @@ export async function getUserFromRequest(request: Request, cookies?: import('@sv
 
     const { data: { user }, error } = await supabase.auth.getUser();
     if (error || !user) {
-      console.log('❌ No session cookie found for request');
       return null;
     }
 
-    console.log('✅ User authenticated via cookies:', user.email);
     return { user, supabase };
   }
 
-  console.log('❌ No Bearer token or cookies present on request');
   return null;
 }
