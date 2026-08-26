@@ -34,27 +34,28 @@ export async function POST({ request, cookies }) {
     }
     
     const notifications = [];
-    
-    // Send email notification (simplified)
+
+    // NOTE: no real email/webhook provider is wired up yet — these are
+    // simulated sends (status: 'simulated'), not real deliveries. Don't
+    // report them as 'sent' to the client; that would be a false claim.
     if (channels.includes('email')) {
       notifications.push({
         channel: 'email',
-        status: 'sent',
+        status: 'simulated',
         message: `Test execution ${execution.status}: ${execution.name}`
       });
     }
-    
-    // Send webhook notification
+
     if (channels.includes('webhook')) {
       notifications.push({
         channel: 'webhook',
-        status: 'sent',
+        status: 'simulated',
         message: `Webhook triggered for ${execution.name}`
       });
     }
-    
+
     // Save notification record
-    await supabase
+    const { error: insertError } = await supabase
       .from('notifications')
       .insert({
         user_id: user.id,
@@ -63,7 +64,12 @@ export async function POST({ request, cookies }) {
         status: execution.status,
         sent_at: new Date().toISOString()
       });
-    
+
+    if (insertError) {
+      console.error('Failed to save notification record:', insertError);
+      return json({ error: 'Failed to save notification record' }, { status: 500 });
+    }
+
     return json({
       success: true,
       notifications,
