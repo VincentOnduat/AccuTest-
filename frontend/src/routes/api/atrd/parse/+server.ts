@@ -6,21 +6,17 @@ import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/publi
 import { parseATRDContent } from '$lib/server/atrdParser';
 
 export const POST: RequestHandler = async ({ request }) => {
-  console.log('🔍 Parse endpoint called');
-  
   try {
     // ✅ Get the authorization header from the request
     const authHeader = request.headers.get('Authorization');
-    console.log('Auth header present:', !!authHeader);
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       console.error('❌ No valid Authorization header');
       return json({ success: false, error: 'Unauthorized - No token provided' }, { status: 401 });
     }
-    
+
     const token = authHeader.split(' ')[1];
-    console.log('Token received, length:', token.length);
-    
+
     // ✅ Create a Supabase client with the token
     const supabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY);
     
@@ -37,25 +33,19 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ success: false, error: 'Unauthorized - User not found' }, { status: 401 });
     }
     
-    console.log('✅ Authenticated user:', user.email);
-    
     // ✅ Parse the request body
     const body = await request.json();
     const { content } = body;
-    
+
     if (!content) {
       return json({ success: false, error: 'No content provided' }, { status: 400 });
     }
-    
-    console.log('📝 Parsing ATRD content, length:', content.length);
-    
+
     // ✅ Parse the ATRD content
     // This is a simple parser - you can enhance it based on your ATRD format
     const parsedData = parseATRDContent(content);
-    
-    console.log('✅ Parse successful, found sections:', parsedData.sections.length);
-    
-    return json({ 
+
+    return json({
       success: true, 
       data: parsedData 
     });
