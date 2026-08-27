@@ -131,7 +131,12 @@
         <button class="package-card" on:click={() => goto(`/dashboard/packages/${pkg.id}`)}>
           <div class="card-top">
             <span class="pkg-name">{pkg.name}</span>
-            <span class="run-badge {run.className}">{run.icon} {run.label}</span>
+            <div class="badges">
+              <span class="run-badge {run.className}">{run.icon} {run.label}</span>
+              {#if pkg.test_cases?.requiresReview}
+                <span class="review-badge" title="The AI used placeholder selectors for some elements — check the Test Code tab">⚠️ Needs review</span>
+              {/if}
+            </div>
           </div>
 
           <div class="card-meta">
@@ -316,6 +321,24 @@
   .run-badge.passed { background: #d1fae5; color: #065f46; }
   .run-badge.failed { background: #fee2e2; color: #991b1b; }
   .run-badge.errored { background: #fef3c7; color: #92400e; }
+
+  .badges {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .review-badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    background: #fef3c7;
+    color: #92400e;
+  }
 
   .card-meta {
     display: flex;

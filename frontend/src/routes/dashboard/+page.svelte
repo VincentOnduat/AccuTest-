@@ -431,7 +431,12 @@
             <button type="button" class="package-card" on:click={() => goto(`/dashboard/packages/${pkg.id}`)}>
               <div class="package-icon">📦</div>
               <div class="package-info">
-                <h3>{pkg.name}</h3>
+                <div class="package-title-row">
+                  <h3>{pkg.name}</h3>
+                  {#if pkg.test_cases?.requiresReview}
+                    <span class="review-badge" title="The AI used placeholder selectors for some elements — check the Test Code tab">⚠️ Needs review</span>
+                  {/if}
+                </div>
                 <p class="package-meta">{pkg.description || 'No description'}</p>
                 <div class="package-stats">
                   <span>✅ {pkg.automated_test_count || 0}</span>
@@ -584,7 +589,9 @@
   .package-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
   .package-icon { font-size: 2rem; }
   .package-info { flex: 1; }
-  .package-info h3 { font-size: 0.875rem; font-weight: 600; margin: 0 0 0.25rem 0; }
+  .package-title-row { display: flex; align-items: center; gap: 0.375rem; flex-wrap: wrap; margin-bottom: 0.25rem; }
+  .package-info h3 { font-size: 0.875rem; font-weight: 600; margin: 0; }
+  .review-badge { font-size: 0.65rem; font-weight: 500; padding: 0.15rem 0.4rem; border-radius: 999px; white-space: nowrap; background: #fef3c7; color: #92400e; }
   .package-meta { font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; }
   .package-stats { display: flex; gap: 0.5rem; font-size: 0.7rem; color: #9ca3af; }
   .content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
