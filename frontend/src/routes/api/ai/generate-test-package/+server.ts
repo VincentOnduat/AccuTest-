@@ -1,11 +1,75 @@
 import { json } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
+import { createOpenAI } from '@ai-sdk/openai';
+import { generateObject } from 'ai';
+import { z } from 'zod';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
 import { assertSafeTargetUrl, UnsafeTargetUrlError } from '$lib/server/targetUrl';
 
+const TEST_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'] as const;
+
+const TestPackageSchema = z.object({
+  testCases: z
+    .array(
+      z.object({
+        name: z.string(),
+        description: z.string(),
+        priority: z.enum(TEST_PRIORITIES),
+        steps: z.array(z.string()),
+        expectedResult: z.string()
+      })
+    )
+    .min(1),
+  executableCode: z.string()
+});
+
+const FRAMEWORK_LABELS: Record<string, string> = {
+  playwright: 'Playwright (@playwright/test)',
+  k6: 'Playwright (@playwright/test)',
+  'owasp-zap': 'Playwright (@playwright/test)',
+  'axe-core': 'Playwright (@playwright/test)',
+  percy: 'Playwright (@playwright/test)',
+  chromatic: 'Playwright (@playwright/test)',
+  dbt: 'Playwright (@playwright/test)',
+  'great-expectations': 'Playwright (@playwright/test)',
+  cypress: 'Cypress',
+  jest: 'Jest',
+  vitest: 'Jest'
+};
+
+function buildPrompt(document: string, testDomain: string, framework: string) {
+  const frameworkLabel = FRAMEWORK_LABELS[framework] || 'Playwright (@playwright/test)';
+
+  const system = `You are an expert test automation engineer. Given an Automation Test \
+Requirement Document (ATRD) excerpt and a target test domain, produce a single ${frameworkLabel} \
+test file plus a structured list of the test cases it covers.
+
+Rules for the generated code:
+- It must be a complete, syntactically valid ${frameworkLabel} test file — real imports, real \
+assertions, nothing left as a placeholder or TODO.
+- Use RELATIVE paths for navigation (e.g. page.goto('/'), cy.visit('/login')) — the base URL is \
+injected externally at run time, never hardcode a domain.
+- Don't assume app-specific selectors (like '#login-btn') unless the document explicitly \
+describes the UI. When the document doesn't describe concrete selectors, write a generic \
+smoke-style test appropriate to the ${testDomain} domain instead of guessing at markup.
+- Tailor the scenario to the ${testDomain} test domain (functional, performance, security, \
+accessibility, visual, or dataQuality/ETL) as well as anything concrete the document describes.
+
+Rules for testCases: one entry per distinct scenario the code actually exercises — don't list \
+cases the code doesn't cover, and don't leave code the test cases don't describe.`;
+
+  const prompt = `Test domain: ${testDomain}
+Target framework: ${frameworkLabel}
+
+ATRD document:
+"""
+${document}
+"""`;
+
+  return { system, prompt };
+}
+
 export async function POST({ request }) {
-  console.log('🔵 Generate Test Package API called');
-  
   try {
     const authHeader = request.headers.get('authorization');
     
@@ -33,11 +97,19 @@ export async function POST({ request }) {
     const body = await request.json();
     const { document, name, framework = 'playwright', testDomain = 'functional', atrdId, targetUrl } = body;
 
-    console.log('🔍 DEBUG - Received testDomain:', testDomain);
-    console.log('🔍 DEBUG - Full body:', JSON.stringify(body, null, 2));
-
     if (!document) {
       return json({ error: 'Missing document' }, { status: 400 });
+    }
+
+    let OPENAI_API_KEY: string | undefined;
+    try {
+      const env = await import('$env/static/private');
+      OPENAI_API_KEY = (env as any).OPENAI_API_KEY;
+    } catch {
+      // module import itself failing (not just an empty value) — treat the same as unconfigured
+    }
+    if (!OPENAI_API_KEY) {
+      return json({ error: 'OpenAI API key not configured' }, { status: 503 });
     }
 
     // The website this package tests, e.g. a live site the user wants
@@ -58,35 +130,25 @@ export async function POST({ request }) {
       }
     }
 
-    console.log(`🟢 Generating test code for domain: ${testDomain}`);
-    console.log(`📝 Document: ${document.substring(0, 100)}`);
-    
-    // Generate actual executable test code based on the framework and domain 
-    let testCode = '';
-let testCases: any[] = [];
+    const openai = createOpenAI({ apiKey: OPENAI_API_KEY });
+    const { system, prompt } = buildPrompt(document, testDomain, framework);
 
-// Include ALL frameworks that should use the Playwright/Jest generator
-const playwrightFrameworks = ['playwright', 'k6', 'owasp-zap', 'axe-core', 'percy', 'chromatic', 'dbt', 'great-expectations'];
-const cypressFrameworks = ['cypress'];
-const jestFrameworks = ['jest', 'vitest'];
-
-if (playwrightFrameworks.includes(framework)) {
-  testCode = generatePlaywrightTests(document, testDomain);
-  testCases = extractTestCasesFromDocument(document, testDomain);
-} else if (cypressFrameworks.includes(framework)) {
-  testCode = generateCypressTests(document, testDomain);
-  testCases = extractTestCasesFromDocument(document, testDomain);
-} else if (jestFrameworks.includes(framework)) {
-  testCode = generateJestTests(document, testDomain);
-  testCases = extractTestCasesFromDocument(document, testDomain);
-} else {
-  // Default fallback - use playwright generator
-  console.log(`⚠️ Unknown framework: ${framework}, using playwright generator as fallback`);
-  testCode = generatePlaywrightTests(document, testDomain);
-  testCases = extractTestCasesFromDocument(document, testDomain);
-}
-
-console.log(`🔧 Framework: ${framework}, testCode length: ${testCode.length}`);
+    let testCode: string;
+    let testCases: z.infer<typeof TestPackageSchema>['testCases'];
+    try {
+      const result = await generateObject({
+        model: openai('gpt-4o'),
+        schema: TestPackageSchema,
+        system,
+        prompt,
+        temperature: 0.3
+      });
+      testCode = result.object.executableCode;
+      testCases = result.object.testCases;
+    } catch (aiError) {
+      console.error('AI generation failed:', aiError);
+      return json({ error: 'Test generation failed — the AI service did not return a usable result' }, { status: 502 });
+    }
 
     const testPackage = {
       testCases: testCases,
@@ -122,9 +184,7 @@ console.log(`🔧 Framework: ${framework}, testCode length: ${testCode.length}`)
       return json({ error: dbError.message }, { status: 500 });
     }
     
-    console.log('✅ Test package saved with executable code');
-    
-    return json({ 
+    return json({
       success: true, 
       id: data.id, 
       data,
@@ -136,490 +196,4 @@ console.log(`🔧 Framework: ${framework}, testCode length: ${testCode.length}`)
     console.error('API error:', error);
     return json({ error: 'Internal server error' }, { status: 500 });
   }
-}
-
-function generatePlaywrightTests(document: string, testDomain: string): string {
-  console.log(`🎯 [DEBUG] testDomain value: "${testDomain}"`);
-  console.log(`🎯 [DEBUG] testDomain type: ${typeof testDomain}`);
-  console.log(`🎯 [DEBUG] testDomain === 'performance': ${testDomain === 'performance'}`);
-  const doc = document.toLowerCase();
-  
-  // Performance/Load test detection
-  if (testDomain === 'performance' || doc.includes('load test') || doc.includes('performance') || doc.includes('concurrent')) {
-    return `
-import { test, expect } from '@playwright/test';
-
-test.describe('Performance & Load Tests', () => {
-  test('Load test with concurrent users', async ({ request }) => {
-    const startTime = Date.now();
-    const requests = [];
-    const url = '/api/endpoint';
-    
-    // Simulate 100 concurrent requests
-    for (let i = 0; i < 100; i++) {
-      requests.push(request.get(url));
-    }
-    
-    const responses = await Promise.all(requests);
-    const endTime = Date.now();
-    const duration = endTime - startTime;
-    
-    console.log(\`Completed 100 requests in \${duration}ms\`);
-    console.log(\`Average response time: \${duration / 100}ms\`);
-    
-    // Verify all requests succeeded
-    responses.forEach(response => {
-      expect(response.ok()).toBeTruthy();
-    });
-  });
-  
-  test('Response time under load', async ({ request }) => {
-    const responseTimes = [];
-    
-    for (let i = 0; i < 50; i++) {
-      const start = Date.now();
-      await request.get('/api/endpoint');
-      const end = Date.now();
-      responseTimes.push(end - start);
-    }
-    
-    const avgTime = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
-    console.log(\`Average response time: \${avgTime}ms\`);
-    
-    // Assert average response time is under 500ms
-    expect(avgTime).toBeLessThan(500);
-  });
-});
-`;
-  }
-  
-  // Security test detection
-  if (testDomain === 'security' || doc.includes('security') || doc.includes('dast') || doc.includes('sast')) {
-    return `
-import { test, expect } from '@playwright/test';
-
-test.describe('Security Tests', () => {
-  test('Check for SQL injection vulnerabilities', async ({ request }) => {
-    const maliciousInputs = ["' OR '1'='1", "'; DROP TABLE users; --", "' OR 1=1--"];
-    
-    for (const input of maliciousInputs) {
-      const response = await request.get(\`/api/search?q=\${encodeURIComponent(input)}\`);
-      // Should not return error or unexpected data
-      expect(response.status()).not.toBe(500);
-      const body = await response.text();
-      expect(body).not.toContain('SQL syntax');
-    }
-  });
-  
-  test('Check for XSS vulnerabilities', async ({ page }) => {
-    await page.goto('/search');
-    const xssPayload = '<script>alert("XSS")</script>';
-    await page.fill('input[name="q"]', xssPayload);
-    await page.click('button[type="submit"]');
-    
-    // Check that script wasn't executed
-    const pageContent = await page.content();
-    expect(pageContent).not.toContain('<script>alert("XSS")</script>');
-  });
-});
-`;
-  }
-  
-  // Accessibility test detection
-  if (testDomain === 'accessibility' || doc.includes('accessibility') || doc.includes('wcag')) {
-    return `
-import { test, expect } from '@playwright/test';
-const AxeBuilder = require('@axe-core/playwright').default;
-
-test.describe('Accessibility Tests', () => {
-  test('Homepage has no accessibility violations', async ({ page }) => {
-    await page.goto('/');
-    const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
-    expect(accessibilityScanResults.violations).toEqual([]);
-  });
-  
-  test('Check keyboard navigation', async ({ page }) => {
-    await page.goto('/');
-    await page.keyboard.press('Tab');
-    await expect(page.locator(':focus')).toBeVisible();
-    
-    // Tab through all focusable elements
-    for (let i = 0; i < 20; i++) {
-      await page.keyboard.press('Tab');
-    }
-  });
-});
-`;
-  }
-  
-  // Visual test detection
-  if (testDomain === 'visual' || doc.includes('visual') || doc.includes('screenshot')) {
-    return `
-import { test, expect } from '@playwright/test';
-
-test.describe('Visual Regression Tests', () => {
-  test('Homepage visual snapshot', async ({ page }) => {
-    await page.goto('/');
-    await expect(page).toHaveScreenshot('homepage.png');
-  });
-  
-  test('Responsive design - mobile view', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
-    await expect(page).toHaveScreenshot('homepage-mobile.png');
-  });
-});
-`;
-  }
-  
-  // Data Quality/ETL test detection
-  if (testDomain === 'dataQuality' || doc.includes('etl') || doc.includes('data quality') || doc.includes('data validation')) {
-    return `
-import { test, expect } from '@playwright/test';
-
-test.describe('Data Quality & ETL Tests', () => {
-  test('Validate data completeness', async ({ request }) => {
-    const response = await request.get('/api/data/validate');
-    const data = await response.json();
-    
-    expect(data).toHaveProperty('totalRecords');
-    expect(data.totalRecords).toBeGreaterThan(0);
-    expect(data).toHaveProperty('nullCounts');
-  });
-  
-  test('Check data consistency', async ({ request }) => {
-    const response = await request.get('/api/data/consistency');
-    const data = await response.json();
-    
-    // Verify no duplicate keys
-    const keys = data.map((item: any) => item.id);
-    const uniqueKeys = new Set(keys);
-    expect(keys.length).toBe(uniqueKeys.size);
-  });
-});
-`;
-  }
-  
-  // Login flow detection
-  if (doc.includes('login')) {
-    return `
-import { test, expect } from '@playwright/test';
-
-test.describe('Login Functionality', () => {
-  test('User can login with valid credentials', async ({ page }) => {
-    await page.goto('/login');
-    await page.fill('#email', 'test@example.com');
-    await page.fill('#password', 'password123');
-    await page.click('#login-btn');
-    await expect(page).toHaveURL('/dashboard');
-  });
-
-  test('Shows error with invalid password', async ({ page }) => {
-    await page.goto('/login');
-    await page.fill('#email', 'test@example.com');
-    await page.fill('#password', 'wrongpassword');
-    await page.click('#login-btn');
-    await expect(page.locator('.error')).toBeVisible();
-  });
-});
-`;
-  }
-  
-  if (doc.includes('api')) {
-    return `
-import { test, expect } from '@playwright/test';
-
-test.describe('API Tests', () => {
-  test('GET endpoint returns 200', async ({ request }) => {
-    const response = await request.get('/api/users');
-    expect(response.status()).toBe(200);
-  });
-
-  test('POST endpoint creates resource', async ({ request }) => {
-    const response = await request.post('/api/users', {
-      data: { name: 'Test User', email: 'test@example.com' }
-    });
-    expect(response.status()).toBe(201);
-  });
-});
-`;
-  }
-  
-  // Default: a real browser smoke test against whatever URL the package is
-  // configured to run against (see `target_url` / Settings' "Target
-  // Application URL"). Unlike the domain-specific generators above, this
-  // doesn't assume anything about the site's structure — no app-specific
-  // selectors — so it's the one that actually works against an arbitrary
-  // remote site the user hands us a URL for, not just a canned scenario.
-  return `
-import { test, expect } from '@playwright/test';
-
-test.describe('Site Smoke Tests', () => {
-  test('Homepage loads successfully', async ({ page }) => {
-    const response = await page.goto('/');
-    expect(response?.ok(), \`Expected a successful response, got \${response?.status()}\`).toBeTruthy();
-    await expect(page).toHaveTitle(/.+/);
-  });
-
-  test('Homepage has no failed network requests', async ({ page }) => {
-    const failures: string[] = [];
-    page.on('requestfailed', (req) => failures.push(\`\${req.method()} \${req.url()} — \${req.failure()?.errorText}\`));
-    await page.goto('/', { waitUntil: 'networkidle' });
-    expect(failures, failures.join('\\n')).toHaveLength(0);
-  });
-
-  test('Homepage has no browser console errors', async ({ page }) => {
-    const errors: string[] = [];
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') errors.push(msg.text());
-    });
-    page.on('pageerror', (err) => errors.push(err.message));
-    await page.goto('/');
-    expect(errors, errors.join('\\n')).toHaveLength(0);
-  });
-});
-`;
-}
-
-function generateCypressTests(document: string, testDomain: string): string {
-  const doc = document.toLowerCase();
-  
-  // Performance/Load test detection
-  if (testDomain === 'performance' || doc.includes('load test') || doc.includes('performance')) {
-    return `
-describe('Performance & Load Tests', () => {
-  it('Load test with concurrent requests', () => {
-    const startTime = Date.now();
-    const requests = [];
-    
-    // Simulate requests using cy.request
-    for (let i = 0; i < 50; i++) {
-      requests.push(cy.request('/api/endpoint'));
-    }
-    
-    cy.wrap(Promise.all(requests)).then(() => {
-      const endTime = Date.now();
-      const duration = endTime - startTime;
-      cy.log(\`Completed 50 requests in \${duration}ms\`);
-      expect(duration).to.be.lessThan(5000);
-    });
-  });
-});
-`;
-  }
-  
-  // Security test detection
-  if (testDomain === 'security' || doc.includes('security')) {
-    return `
-describe('Security Tests', () => {
-  it('Check for SQL injection', () => {
-    const maliciousInput = "' OR '1'='1";
-    cy.request({
-      method: 'GET',
-      url: \`/api/search?q=\${encodeURIComponent(maliciousInput)}\`,
-      failOnStatusCode: false
-    }).then((response) => {
-      expect(response.status).not.to.eq(500);
-      expect(response.body).not.to.contain('SQL syntax');
-    });
-  });
-});
-`;
-  }
-  
-  // Default Cypress test
-  if (doc.includes('login')) {
-    return `
-describe('Login Functionality', () => {
-  beforeEach(() => {
-    cy.visit('/login');
-  });
-
-  it('User can login with valid credentials', () => {
-    cy.get('#email').type('test@example.com');
-    cy.get('#password').type('password123');
-    cy.get('#login-btn').click();
-    cy.url().should('include', '/dashboard');
-  });
-});
-`;
-  }
-  
-  return `
-describe('Generated Tests', () => {
-  it('Test generated for: ${document.substring(0, 50)}', () => {
-    expect(true).to.be.true;
-  });
-});
-`;
-}
-
-function generateJestTests(document: string, testDomain: string): string {
-  const doc = document.toLowerCase();
-  
-  // Performance test
-  if (testDomain === 'performance') {
-    return `
-describe('Performance Tests', () => {
-  test('API response time under load', async () => {
-    const startTime = Date.now();
-    const response = await fetch('/api/endpoint');
-    const endTime = Date.now();
-    const duration = endTime - startTime;
-    
-    expect(response.ok).toBe(true);
-    expect(duration).toBeLessThan(500);
-  });
-});
-`;
-  }
-  
-  // Security test
-  if (testDomain === 'security') {
-    return `
-describe('Security Tests', () => {
-  test('No SQL injection vulnerabilities', async () => {
-    const maliciousInput = "' OR '1'='1";
-    const response = await fetch(\`/api/search?q=\${encodeURIComponent(maliciousInput)}\`);
-    const text = await response.text();
-    
-    expect(response.status).not.toBe(500);
-    expect(text).not.toContain('SQL syntax');
-  });
-});
-`;
-  }
-  
-  return `
-describe('API Tests', () => {
-  test('Generated test for: ${document.substring(0, 50)}', async () => {
-    expect(true).toBe(true);
-  });
-});
-`;
-}
-
-function extractTestCasesFromDocument(document: string, testDomain: string): any[] {
-  const doc = document.toLowerCase();
-  const testCases: any[] = [];
-  
-  // Performance test cases
-  if (testDomain === 'performance') {
-    testCases.push(
-      {
-        name: "Load test with concurrent users",
-        description: "Verify system handles concurrent users without performance degradation",
-        priority: "High",
-        steps: ["Simulate 100 concurrent users", "Measure response times", "Check for errors"],
-        expectedResult: "All requests complete within acceptable time"
-      },
-      {
-        name: "Response time validation",
-        description: "Ensure API responses are under threshold",
-        priority: "Medium",
-        steps: ["Send multiple requests", "Measure response times", "Calculate average"],
-        expectedResult: "Average response time < 500ms"
-      }
-    );
-  }
-  // Security test cases
-  else if (testDomain === 'security') {
-    testCases.push(
-      {
-        name: "SQL Injection prevention",
-        description: "Verify SQL injection attempts are blocked",
-        priority: "Critical",
-        steps: ["Send SQL injection payloads", "Check responses", "Verify no data leakage"],
-        expectedResult: "All injection attempts are rejected"
-      },
-      {
-        name: "XSS prevention",
-        description: "Verify cross-site scripting attempts are blocked",
-        priority: "Critical",
-        steps: ["Send XSS payloads", "Check if scripts execute", "Verify sanitization"],
-        expectedResult: "Scripts are not executed"
-      }
-    );
-  }
-  // Accessibility test cases
-  else if (testDomain === 'accessibility') {
-    testCases.push(
-      {
-        name: "WCAG compliance",
-        description: "Verify page meets WCAG 2.1 standards",
-        priority: "High",
-        steps: ["Run axe-core scan", "Check violations", "Verify contrast ratios"],
-        expectedResult: "No critical violations found"
-      }
-    );
-  }
-  // Visual test cases
-  else if (testDomain === 'visual') {
-    testCases.push(
-      {
-        name: "Visual regression",
-        description: "Verify UI matches expected appearance",
-        priority: "Medium",
-        steps: ["Capture screenshots", "Compare with baseline", "Check for differences"],
-        expectedResult: "No unexpected visual changes"
-      }
-    );
-  }
-  // Data Quality test cases
-  else if (testDomain === 'dataQuality') {
-    testCases.push(
-      {
-        name: "Data completeness",
-        description: "Verify all required data is present",
-        priority: "High",
-        steps: ["Check record counts", "Validate required fields", "Check for nulls"],
-        expectedResult: "All expected data is present"
-      },
-      {
-        name: "Data consistency",
-        description: "Verify data consistency across sources",
-        priority: "High",
-        steps: ["Compare data sources", "Check for duplicates", "Validate relationships"],
-        expectedResult: "Data is consistent across all sources"
-      }
-    );
-  }
-  // Login test cases
-  else if (doc.includes('login')) {
-    testCases.push(
-      {
-        name: "Login with valid credentials",
-        description: "Verify user can log in with valid email and password",
-        priority: "Critical",
-        steps: ["Navigate to login page", "Enter email", "Enter password", "Click login"],
-        expectedResult: "Redirected to dashboard"
-      },
-      {
-        name: "Login with invalid password",
-        description: "Verify error shown with wrong password",
-        priority: "High",
-        steps: ["Navigate to login page", "Enter email", "Enter wrong password", "Click login"],
-        expectedResult: "Error message displayed"
-      }
-    );
-  } else {
-    testCases.push(
-      {
-        name: "Homepage loads successfully",
-        description: "Verify the site responds with a successful status and renders a real page title",
-        priority: "Critical",
-        steps: ["Navigate to the homepage", "Check the response status", "Check the page title"],
-        expectedResult: "Page loads with a 2xx/3xx response and a non-empty title"
-      },
-      {
-        name: "No failed requests or console errors",
-        description: "Verify the homepage loads without failed network requests or JavaScript errors",
-        priority: "High",
-        steps: ["Navigate to the homepage", "Monitor network requests", "Monitor console output"],
-        expectedResult: "No failed requests and no console errors"
-      }
-    );
-  }
-  
-  return testCases;
 }
