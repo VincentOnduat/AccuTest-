@@ -384,10 +384,13 @@
                 <div class="package-header">
                   <strong>{pkg.name}</strong>
                   <span class="status-badge {pkg.status}">{pkg.status}</span>
+                  {#if pkg.test_cases?.requiresReview}
+                    <span class="status-badge review" title="The AI used placeholder selectors for some elements — check the Test Code tab">⚠️ Needs review</span>
+                  {/if}
                 </div>
                 <div class="package-meta">
                   <span>📅 {new Date(pkg.created_at).toLocaleDateString()}</span>
-                  <span>🧪 {pkg.test_cases?.length || 0} test cases</span>
+                  <span>🧪 {pkg.test_cases?.testCases?.length || 0} test cases</span>
                 </div>
                 <button class="btn-view-small" on:click={() => goto(`/dashboard/packages/${pkg.id}`)}>
                   View Details
@@ -725,6 +728,7 @@
   .status-badge.pending { background: #fef3c7; color: #92400e; }
   .status-badge.completed { background: #d1fae5; color: #065f46; }
   .status-badge.failed { background: #fee2e2; color: #991b1b; }
+  .status-badge.review { background: #fef3c7; color: #92400e; }
   
   .btn-view-small {
     background: #667eea;

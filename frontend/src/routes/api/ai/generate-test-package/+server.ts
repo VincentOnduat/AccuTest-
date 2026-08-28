@@ -20,7 +20,9 @@ const TestPackageSchema = z.object({
       })
     )
     .min(1),
-  executableCode: z.string()
+  executableCode: z.string(),
+  requiresReview: z.boolean(),
+  unresolvedFields: z.array(z.string())
 });
 
 const FRAMEWORK_LABELS: Record<string, string> = {
@@ -41,22 +43,41 @@ function buildPrompt(document: string, testDomain: string, framework: string) {
   const frameworkLabel = FRAMEWORK_LABELS[framework] || 'Playwright (@playwright/test)';
 
   const system = `You are an expert test automation engineer. Given an Automation Test \
-Requirement Document (ATRD) excerpt and a target test domain, produce a single ${frameworkLabel} \
-test file plus a structured list of the test cases it covers.
+Requirement Document (ATRD) excerpt and a target test domain, do this in two separate steps:
 
-Rules for the generated code:
+STEP 1 — Design the test cases from requirements alone.
+Read the ATRD and decide what should be tested: one test case per distinct scenario it describes \
+for the ${testDomain} domain. Each test case (name, description, priority, steps, expectedResult) \
+must be grounded in what the document actually says — do not invent scenarios, UI, or behavior \
+the document doesn't describe. This step is pure requirements reasoning; it has nothing to do \
+with implementation details like selectors or element identifiers yet.
+
+STEP 2 — Write the ${frameworkLabel} code for those test cases.
 - It must be a complete, syntactically valid ${frameworkLabel} test file — real imports, real \
-assertions, nothing left as a placeholder or TODO.
+assertions, one test per test case from Step 1.
 - Use RELATIVE paths for navigation (e.g. page.goto('/'), cy.visit('/login')) — the base URL is \
 injected externally at run time, never hardcode a domain.
-- Don't assume app-specific selectors (like '#login-btn') unless the document explicitly \
-describes the UI. When the document doesn't describe concrete selectors, write a generic \
-smoke-style test appropriate to the ${testDomain} domain instead of guessing at markup.
-- Tailor the scenario to the ${testDomain} test domain (functional, performance, security, \
-accessibility, visual, or dataQuality/ETL) as well as anything concrete the document describes.
+- SELECTOR RULE — the most important rule in this prompt, follow it exactly: use a \
+selector/locator/element identifier ONLY if the ATRD document explicitly names it (an element \
+id, a data-testid, a labeled field name, button text quoted in the document, etc.). For every \
+element the code needs to interact with that the document does NOT explicitly identify, do NOT \
+guess a plausible-looking real selector. Instead:
+    - In the code, use an obviously-fake placeholder locator following the pattern \
+'[data-testid="TODO_<snake_case_field_name>"]', with a comment on the same line: \
+// SELECTOR NOT SPECIFIED IN ATRD — REPLACE
+    - Add that same <snake_case_field_name> to the unresolvedFields output field.
+  Never fabricate a selector that looks like it could be real — no '#login-btn', no \
+'.submit-button', no guessed name= attributes. A fake-but-plausible selector is worse than an \
+obvious placeholder: it fails silently instead of being visibly a TODO.
 
-Rules for testCases: one entry per distinct scenario the code actually exercises — don't list \
-cases the code doesn't cover, and don't leave code the test cases don't describe.`;
+Rules for the structured output:
+- testCases: exactly the scenarios designed in Step 1 — one entry per scenario the code actually \
+exercises, nothing the code doesn't cover and nothing left out.
+- requiresReview: true if the code contains ANY TODO_ placeholder selector, false only if every \
+element the code touches was grounded in an explicit identifier from the document.
+- unresolvedFields: the exact list of <snake_case_field_name> placeholders used in the code \
+(empty array if requiresReview is false). Each entry should be short and specific — e.g. \
+"shipping_address_input", "order_submit_button" — not a vague "form field".`;
 
   const prompt = `Test domain: ${testDomain}
 Target framework: ${frameworkLabel}
@@ -135,6 +156,8 @@ export async function POST({ request }) {
 
     let testCode: string;
     let testCases: z.infer<typeof TestPackageSchema>['testCases'];
+    let requiresReview: boolean;
+    let unresolvedFields: string[];
     try {
       const result = await generateObject({
         model: openai('gpt-4o'),
@@ -145,6 +168,8 @@ export async function POST({ request }) {
       });
       testCode = result.object.executableCode;
       testCases = result.object.testCases;
+      requiresReview = result.object.requiresReview;
+      unresolvedFields = result.object.unresolvedFields;
     } catch (aiError) {
       console.error('AI generation failed:', aiError);
       return json({ error: 'Test generation failed — the AI service did not return a usable result' }, { status: 502 });
@@ -154,6 +179,8 @@ export async function POST({ request }) {
       testCases: testCases,
       executableCode: testCode,
       framework: framework,
+      requiresReview: requiresReview,
+      unresolvedFields: unresolvedFields,
       summary: {
         totalTests: testCases.length,
         critical: testCases.filter((t: any) => t.priority === 'Critical').length,
@@ -185,11 +212,13 @@ export async function POST({ request }) {
     }
     
     return json({
-      success: true, 
-      id: data.id, 
+      success: true,
+      id: data.id,
       data,
       testCode: testCode,
-      summary: testPackage.summary 
+      requiresReview: requiresReview,
+      unresolvedFields: unresolvedFields,
+      summary: testPackage.summary
     });
     
   } catch (error) {

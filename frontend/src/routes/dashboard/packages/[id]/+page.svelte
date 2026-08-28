@@ -192,6 +192,9 @@
         <div class="title-row">
           <h1>{pkg.name}</h1>
           <span class="run-badge {runBadge.className}">{runBadge.icon} {runBadge.label}</span>
+          {#if pkg.test_cases?.requiresReview}
+            <span class="review-badge" title="The AI couldn't find a real selector for some elements in the ATRD and used placeholders instead">⚠️ Needs selector review</span>
+          {/if}
         </div>
         <p class="subtitle">
           Created {new Date(pkg.created_at).toLocaleDateString()} · {pkg.test_cases?.framework || 'playwright'} · id
@@ -205,6 +208,15 @@
         <button class="danger-btn" on:click={deletePackage}>Delete</button>
       </div>
     </div>
+
+    {#if pkg.test_cases?.requiresReview && pkg.test_cases?.unresolvedFields?.length > 0}
+      <div class="banner review">
+        ⚠️ The ATRD didn't specify a real selector for: <strong>{pkg.test_cases.unresolvedFields.join(', ')}</strong>.
+        The generated code uses placeholder <code>TODO_*</code> locators for these — check the Test Code tab and
+        replace them before this package will run against a real page. You can still run it as-is to see exactly
+        where the placeholders fail.
+      </div>
+    {/if}
 
     {#if runError}
       <div class="banner error">{runError}</div>
@@ -435,6 +447,17 @@
   .run-badge.failed { background: #fee2e2; color: #991b1b; }
   .run-badge.errored { background: #fef3c7; color: #92400e; }
 
+  .review-badge {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    background: #fef3c7;
+    color: #92400e;
+  }
+
   .header-actions {
     display: flex;
     gap: 0.5rem;
@@ -470,6 +493,12 @@
     margin-bottom: 1.5rem;
   }
   .banner.error { background: #fee2e2; color: #dc2626; }
+  .banner.review { background: #fffbeb; color: #92400e; }
+  .banner.review code {
+    background: rgba(146, 64, 14, 0.12);
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.25rem;
+  }
 
   .stats-row,
   .run-stats-row {
