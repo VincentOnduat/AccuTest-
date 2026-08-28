@@ -119,12 +119,26 @@ function execPlaywrightCli(
   projectRoot: string
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    const bin = path.join(projectRoot, 'node_modules', '.bin', 'playwright');
-    const child = spawn(bin, ['test', '--config', configPath], {
-      cwd,
-      env: { ...process.env, CI: '1' },
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+    // On POSIX, node_modules/.bin/playwright is a directly-executable shebang
+    // script. On Windows there's no such thing — npm also installs a
+    // playwright.cmd shim there, but .cmd files can only be launched through
+    // cmd.exe (shell: true), never spawned directly; without both of these,
+    // this fails with ENOENT regardless of whether the shim file exists.
+    const isWindows = process.platform === 'win32';
+    const bin = path.join(projectRoot, 'node_modules', '.bin', isWindows ? 'playwright.cmd' : 'playwright');
+    const args = ['test', '--config', configPath];
+
+    // With shell: true, spawn() hands command + args to cmd.exe as one
+    // command line without escaping them itself — an unquoted path with a
+    // space (e.g. "Program Files") would silently split into multiple
+    // arguments. Quote everything ourselves and pass it as a single command
+    // string (no separate args array) so Node isn't left guessing how to
+    // join an args array under shell: true. These are all internally-
+    // generated paths/literals, never user input — this is about
+    // correctness (spaces in paths), not injection risk.
+    const child = isWindows
+      ? spawn([bin, ...args].map((part) => `"${part}"`).join(' '), { cwd, env: { ...process.env, CI: '1' }, stdio: ['ignore', 'pipe', 'pipe'], shell: true })
+      : spawn(bin, args, { cwd, env: { ...process.env, CI: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
 
     let stdout = '';
     let stderr = '';
