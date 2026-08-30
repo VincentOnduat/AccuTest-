@@ -54,30 +54,42 @@ with implementation details like selectors or element identifiers yet.
 
 STEP 2 — Write the ${frameworkLabel} code for those test cases.
 - It must be a complete, syntactically valid ${frameworkLabel} test file — real imports, real \
-assertions, one test per test case from Step 1.
+assertions, one test.step() (or one top-level test, see STRUCTURE below) per test case from \
+Step 1.
 - Use RELATIVE paths for navigation (e.g. page.goto('/'), cy.visit('/login')) — the base URL is \
 injected externally at run time, never hardcode a domain.
-- SELECTOR RULE — the most important rule in this prompt, follow it exactly: use a \
-selector/locator/element identifier ONLY if the ATRD document explicitly names it (an element \
-id, a data-testid, a labeled field name, button text quoted in the document, etc.). For every \
-element the code needs to interact with that the document does NOT explicitly identify, do NOT \
-guess a plausible-looking real selector. Instead:
-    - In the code, use an obviously-fake placeholder locator following the pattern \
-'[data-testid="TODO_<snake_case_field_name>"]', with a comment on the same line: \
-// SELECTOR NOT SPECIFIED IN ATRD — REPLACE
-    - Add that same <snake_case_field_name> to the unresolvedFields output field.
-  Never fabricate a selector that looks like it could be real — no '#login-btn', no \
-'.submit-button', no guessed name= attributes. A fake-but-plausible selector is worse than an \
-obvious placeholder: it fails silently instead of being visibly a TODO.
+- STRUCTURE — when test cases from Step 1 form a sequential flow (a later case only makes sense \
+after an earlier one happened — e.g. "add to cart" assumes the user already logged in), write \
+them as test.step('<case name>', async () => { ... }) calls inside ONE test(), in order, sharing \
+a single page — never as separate top-level test() blocks, which each get an independent, \
+unauthenticated page with no memory of prior steps. Only use separate top-level test() blocks \
+for cases that are genuinely independent of each other (neither depends on the other's state).
+- GROUNDING RULE — the most important rule in this prompt, follow it exactly, and it applies \
+equally to BOTH of the following:
+    (a) any selector/locator/element identifier the code interacts with
+    (b) any page route/path the code navigates to (page.goto(), cy.visit()), EXCEPT '/' itself — \
+the bare base URL is always fine to navigate to, since that's true by definition, not a guess
+  Only use one if the ATRD document explicitly names it (an element id, a data-testid, a labeled \
+field name, button text quoted in the document; a specific page path stated in the document). \
+For anything the code needs that the document does NOT explicitly identify, do NOT guess a \
+plausible-looking real value. Instead:
+    - In the code, use an obviously-fake placeholder following the pattern \
+'[data-testid="TODO_<snake_case_name>"]' for a selector, or '/TODO_ROUTE_<snake_case_name>' \
+for a route, with a comment on the same line: // NOT SPECIFIED IN ATRD — REPLACE
+    - Add that same <snake_case_name> to the unresolvedFields output field.
+  Never fabricate a selector or route that looks like it could be real — no '#login-btn', no \
+'/login', no guessed name= attributes. A fake-but-plausible value is worse than an obvious \
+placeholder: it fails silently instead of being visibly a TODO.
 
 Rules for the structured output:
 - testCases: exactly the scenarios designed in Step 1 — one entry per scenario the code actually \
 exercises, nothing the code doesn't cover and nothing left out.
-- requiresReview: true if the code contains ANY TODO_ placeholder selector, false only if every \
-element the code touches was grounded in an explicit identifier from the document.
-- unresolvedFields: the exact list of <snake_case_field_name> placeholders used in the code \
-(empty array if requiresReview is false). Each entry should be short and specific — e.g. \
-"shipping_address_input", "order_submit_button" — not a vague "form field".`;
+- requiresReview: true if the code contains ANY TODO_ placeholder (selector or route), false only \
+if every selector and route the code uses was grounded in an explicit statement in the document \
+(or is the bare '/').
+- unresolvedFields: the exact list of <snake_case_name> placeholders used in the code (empty \
+array if requiresReview is false). Each entry should be short and specific — e.g. \
+"shipping_address_input", "login_page_route" — not a vague "form field".`;
 
   const prompt = `Test domain: ${testDomain}
 Target framework: ${frameworkLabel}
