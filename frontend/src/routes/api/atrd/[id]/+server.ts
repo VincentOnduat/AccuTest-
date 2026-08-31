@@ -1,6 +1,19 @@
 import { json } from '@sveltejs/kit';
 import { getUserFromRequest } from '$lib/server/auth';
 
+// Postgres' own error code for "the value you gave isn't even the right
+// shape for this column" (e.g. an id param that isn't a valid UUID) — a
+// client input problem, so it should be a 400, not a 500 with the raw
+// Postgres error text exposed to the caller.
+const INVALID_INPUT_SYNTAX = '22P02';
+
+function dbErrorResponse(error: { code?: string; message: string }) {
+  if (error.code === INVALID_INPUT_SYNTAX) {
+    return json({ error: 'Invalid ATRD id' }, { status: 400 });
+  }
+  return json({ error: 'Internal server error' }, { status: 500 });
+}
+
 export async function GET({ params, request, cookies }) {
   try {
     const auth = await getUserFromRequest(request, cookies);
@@ -20,7 +33,7 @@ export async function GET({ params, request, cookies }) {
         return json({ error: 'ATRD not found' }, { status: 404 });
       }
       console.error('Supabase select error:', error);
-      return json({ error: error.message }, { status: 500 });
+      return dbErrorResponse(error);
     }
 
     return json(data);
@@ -53,7 +66,7 @@ export async function PUT({ params, request, cookies }) {
 
     if (error) {
       console.error('Supabase update error:', error);
-      return json({ error: error.message }, { status: 500 });
+      return dbErrorResponse(error);
     }
 
     return json({ success: true, data });
@@ -81,7 +94,7 @@ export async function DELETE({ params, request, cookies }) {
 
     if (error) {
       console.error('Supabase delete error:', error);
-      return json({ error: error.message }, { status: 500 });
+      return dbErrorResponse(error);
     }
 
     return json({ success: true });
