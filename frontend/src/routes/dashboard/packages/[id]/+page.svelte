@@ -128,9 +128,44 @@
     }
   }
 
-  function copyToClipboard(text: string) {
-    navigator.clipboard.writeText(text);
+  // Extension per framework, matching the actual generated code style —
+  // everything the backend routes through the Playwright generator (see
+  // FRAMEWORK_LABELS in api/ai/generate-test-package) gets .spec.ts here too.
+  function frameworkExtension(framework: string) {
+    if (framework === 'cypress') return 'cy.ts';
+    if (framework === 'jest' || framework === 'vitest') return 'test.ts';
+    return 'spec.ts';
+  }
+
+  function safeFileBase(name: string) {
+    return (name || 'test').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'test';
+  }
+
+  // Prepends a warning comment when the package needs a selector review, so
+  // that context travels with the code once it's copied or downloaded out of
+  // the dashboard instead of only living in the UI badge.
+  function exportableCode() {
+    const code = pkg?.test_cases?.executableCode || pkg?.test_cases?.code || '';
+    if (!pkg?.test_cases?.requiresReview) return code;
+    const fields = pkg?.test_cases?.unresolvedFields?.length ? ` (${pkg.test_cases.unresolvedFields.join(', ')})` : '';
+    return `// ⚠️ Contains placeholder selectors${fields} — see AccuTest for details\n\n${code}`;
+  }
+
+  function copyToClipboard() {
+    navigator.clipboard.writeText(exportableCode());
     alert('Copied to clipboard!');
+  }
+
+  function downloadCode() {
+    const ext = frameworkExtension(pkg?.test_cases?.framework || 'playwright');
+    const filename = `${safeFileBase(pkg?.name)}.${ext}`;
+    const blob = new Blob([exportableCode()], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function getPriorityColor(priority: string) {
@@ -290,9 +325,10 @@
         <div class="code-block">
           <div class="code-header">
             <span>Executable Test Code ({pkg.test_cases?.framework || 'playwright'})</span>
-            <button class="copy-btn" on:click={() => copyToClipboard(pkg.test_cases?.executableCode || pkg.test_cases?.code || '')}>
-              📋 Copy
-            </button>
+            <div class="code-header-actions">
+              <button class="copy-btn" on:click={copyToClipboard}>📋 Copy</button>
+              <button class="copy-btn" on:click={downloadCode}>⬇️ Download</button>
+            </div>
           </div>
           <pre><code>{pkg.test_cases?.executableCode || pkg.test_cases?.code || '// No executable code found'}</code></pre>
         </div>
@@ -648,6 +684,10 @@
     margin-bottom: 1rem;
     color: #e5e7eb;
     font-size: 0.875rem;
+  }
+  .code-header-actions {
+    display: flex;
+    gap: 0.5rem;
   }
   .copy-btn {
     padding: 0.25rem 0.5rem;
