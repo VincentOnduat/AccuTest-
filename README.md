@@ -84,7 +84,11 @@
 - **Test Frameworks**: Playwright (code generation + real execution), Cypress, Jest, k6 (code generation only)
 
 ### Infrastructure
-- **Hosting**: Vercel / Supabase
+- **Hosting**: Railway or Render, deployed via Docker (see `frontend/Dockerfile`) — **not** Vercel or
+  another serverless/edge platform: `api/test-runner` spawns a real Playwright/Chromium subprocess
+  (see `src/lib/server/testRunner.ts`), which needs a persistent Node server, not a serverless
+  function
+- **Database**: Supabase (see above)
 - **Version Control**: Git / GitHub
 - **CI/CD**: GitHub Actions
 
