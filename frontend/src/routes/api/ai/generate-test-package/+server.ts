@@ -4,6 +4,15 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+// $env/dynamic/private (not $env/static/private) deliberately: static env is
+// inlined into the build by Vite, which would make OPENAI_API_KEY a
+// Docker build-time secret — flagged by `docker build`'s own linter
+// (SecretsUsedInArgOrEnv) as unsafe, since ARG/ENV values persist in image
+// layer history. Dynamic env reads process.env at request time instead, so
+// this only ever needs to be a normal runtime variable on the host —
+// nothing Docker-image-specific, and rotating it needs a restart, not a
+// rebuild.
+import { env as privateEnv } from '$env/dynamic/private';
 import { assertSafeTargetUrl, UnsafeTargetUrlError } from '$lib/server/targetUrl';
 
 const TEST_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'] as const;
@@ -134,13 +143,7 @@ export async function POST({ request }) {
       return json({ error: 'Missing document' }, { status: 400 });
     }
 
-    let OPENAI_API_KEY: string | undefined;
-    try {
-      const env = await import('$env/static/private');
-      OPENAI_API_KEY = (env as any).OPENAI_API_KEY;
-    } catch {
-      // module import itself failing (not just an empty value) — treat the same as unconfigured
-    }
+    const OPENAI_API_KEY = privateEnv.OPENAI_API_KEY;
     if (!OPENAI_API_KEY) {
       return json({ error: 'OpenAI API key not configured' }, { status: 503 });
     }
