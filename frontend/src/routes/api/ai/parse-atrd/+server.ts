@@ -10,6 +10,7 @@ import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/publi
 // previously fell through to a real (failing) OpenAI call instead of the
 // clean 503 below.
 import { env as privateEnv } from '$env/dynamic/private';
+import { checkRateLimit } from '$lib/server/rateLimit';
 
 export async function POST({ request, cookies }) {
   try {
@@ -29,7 +30,16 @@ export async function POST({ request, cookies }) {
     if (!user) {
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
+
+    // Shared budget with ai/generate-test-package — see the note there.
+    const rateLimit = checkRateLimit(`ai:${user.id}`);
+    if (!rateLimit.allowed) {
+      return json(
+        { error: `Rate limit exceeded. Try again in ${rateLimit.retryAfterSeconds}s.` },
+        { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } }
+      );
+    }
+
     const OPENAI_API_KEY = privateEnv.OPENAI_API_KEY;
     if (!OPENAI_API_KEY) {
       return json({ error: 'OpenAI API key not configured' }, { status: 503 });

@@ -14,6 +14,7 @@ import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/publi
 // rebuild.
 import { env as privateEnv } from '$env/dynamic/private';
 import { assertSafeTargetUrl, UnsafeTargetUrlError } from '$lib/server/targetUrl';
+import { checkRateLimit } from '$lib/server/rateLimit';
 
 const TEST_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'] as const;
 
@@ -135,7 +136,18 @@ export async function POST({ request }) {
     if (userError || !user) {
       return json({ error: 'Unauthorized - Invalid token' }, { status: 401 });
     }
-    
+
+    // Shared budget with ai/parse-atrd — both call OpenAI, both cost real
+    // money per call, and unlike most routes in this app, nothing else
+    // throttled how often a signed-up user could hit them.
+    const rateLimit = checkRateLimit(`ai:${user.id}`);
+    if (!rateLimit.allowed) {
+      return json(
+        { error: `Rate limit exceeded. Try again in ${rateLimit.retryAfterSeconds}s.` },
+        { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } }
+      );
+    }
+
     const body = await request.json();
     const { document, name, framework = 'playwright', testDomain = 'functional', atrdId, targetUrl } = body;
 
