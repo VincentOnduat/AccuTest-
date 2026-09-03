@@ -3,6 +3,13 @@ import { streamText } from 'ai';
 import { json } from '@sveltejs/kit';
 import { createServerClient } from '@supabase/ssr';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+// $env/dynamic/private, not $env/static/private — see the identical note in
+// api/ai/generate-test-package/+server.ts. Also fixes a real bug this had:
+// static env's dynamic import only throws if the module itself fails to
+// resolve, not if the value is merely an empty string, so an unset key
+// previously fell through to a real (failing) OpenAI call instead of the
+// clean 503 below.
+import { env as privateEnv } from '$env/dynamic/private';
 
 export async function POST({ request, cookies }) {
   try {
@@ -23,15 +30,11 @@ export async function POST({ request, cookies }) {
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    // Get OpenAI API key
-    let OPENAI_API_KEY;
-    try {
-      const env = await import('$env/static/private');
-      OPENAI_API_KEY = (env as any).OPENAI_API_KEY;
-    } catch (error) {
+    const OPENAI_API_KEY = privateEnv.OPENAI_API_KEY;
+    if (!OPENAI_API_KEY) {
       return json({ error: 'OpenAI API key not configured' }, { status: 503 });
     }
-    
+
     const openai = createOpenAI({ apiKey: OPENAI_API_KEY });
     
     const { document, detectedDomain, systemUrls, environments } = await request.json();
