@@ -8,7 +8,7 @@
   let pkg: any = null;
   let loading = true;
   let error = '';
-  let activeTab: 'cases' | 'code' | 'run' = 'cases';
+  let activeTab: 'cases' | 'code' | 'run' | 'history' = 'cases';
 
   let running = false;
   let runError = '';
@@ -21,6 +21,52 @@
 
   $: id = $page.params.id;
   $: selectedExecution = executions.find((e) => e.id === selectedExecutionId) || executions[0] || null;
+  // Per-test history across every run of this package — a different lens on
+  // the same executions data than the chronological Run Results view: one
+  // row per test name instead of one row per run, so a test that's been
+  // flip-flopping across runs is visible as a pattern instead of only
+  // showing up as a single red row in whichever run you happen to have open.
+  $: testHistory = computeTestHistory(executions);
+
+  // Flaky = has both passed and failed within its last 10 runs — a rolling
+  // window, not all-time, so a test that flaked once months ago and has been
+  // solid since doesn't stay flagged forever. Needs at least 2 runs to mean
+  // anything; with only one, a test is just "passed" or "failed."
+  const FLAKY_WINDOW = 10;
+
+  function computeTestHistory(execs: any[]) {
+    // execs arrive newest-first (see loadExecutions) — walk oldest-first so
+    // each test's run list is in chronological order.
+    const byName = new Map<string, { status: string; executedAt: string }[]>();
+    for (const exec of [...execs].reverse()) {
+      for (const r of exec.test_results || []) {
+        if (!r?.name) continue;
+        if (!byName.has(r.name)) byName.set(r.name, []);
+        byName.get(r.name)!.push({ status: r.status, executedAt: exec.executed_at });
+      }
+    }
+
+    const tests = Array.from(byName.entries()).map(([name, runs]) => {
+      const window = runs.slice(-FLAKY_WINDOW);
+      const passCount = window.filter((r) => r.status === 'passed').length;
+      const hasPass = passCount > 0;
+      const hasFail = passCount < window.length;
+      const last = runs[runs.length - 1];
+      return {
+        name,
+        totalRuns: runs.length,
+        window,
+        passRate: window.length ? (passCount / window.length) * 100 : 0,
+        isFlaky: window.length >= 2 && hasPass && hasFail,
+        lastStatus: last.status,
+        lastRunAt: last.executedAt
+      };
+    });
+
+    // Flaky tests surfaced first — they're the ones that need attention.
+    tests.sort((a, b) => Number(b.isFlaky) - Number(a.isFlaky) || a.name.localeCompare(b.name));
+    return tests;
+  }
 
   onMount(async () => {
     await Promise.all([loadPackage(), loadExecutions()]);
@@ -282,6 +328,7 @@
       <button class="tab-btn" class:active={activeTab === 'cases'} on:click={() => (activeTab = 'cases')}>🧪 Test Cases</button>
       <button class="tab-btn" class:active={activeTab === 'code'} on:click={() => (activeTab = 'code')}>📝 Test Code</button>
       <button class="tab-btn" class:active={activeTab === 'run'} on:click={() => (activeTab = 'run')}>▶️ Run Results</button>
+      <button class="tab-btn" class:active={activeTab === 'history'} on:click={() => (activeTab = 'history')}>🔁 Test History</button>
     </div>
 
     {#if activeTab === 'cases'}
@@ -403,6 +450,42 @@
                 </div>
               </div>
             {/if}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    {#if activeTab === 'history'}
+      <div class="tab-panel" in:fade={{ duration: 150 }}>
+        {#if executions.length === 0}
+          <div class="empty-panel">
+            <p>No run history yet. Test-by-test patterns — including flakiness — only show up once this package has run more than once.</p>
+          </div>
+        {:else}
+          <div class="test-history-list">
+            {#each testHistory as t}
+              <div class="test-history-row" class:flaky={t.isFlaky}>
+                <div class="test-history-top">
+                  <span class="test-history-name">{t.name}</span>
+                  {#if t.isFlaky}
+                    <span class="flaky-badge" title="Passed and failed within its last {FLAKY_WINDOW} runs">🔁 Flaky</span>
+                  {/if}
+                </div>
+                <div class="test-history-meta">
+                  <div class="sparkline" role="img" aria-label="Last {t.window.length} runs: {t.window.map((r) => r.status).join(', ')}">
+                    {#each t.window as run}
+                      <span
+                        class="spark-dot {run.status === 'passed' ? 'passed' : 'failed'}"
+                        title="{run.status} · {formatExecTime(run.executedAt)}"
+                      ></span>
+                    {/each}
+                  </div>
+                  <span class="test-history-stat">{t.passRate.toFixed(0)}% pass rate</span>
+                  <span class="test-history-stat">{t.totalRuns} run{t.totalRuns === 1 ? '' : 's'} total</span>
+                  <span class="test-history-stat">last: {t.lastStatus === 'passed' ? '✅' : '❌'} {formatExecTime(t.lastRunAt)}</span>
+                </div>
+              </div>
+            {/each}
           </div>
         {/if}
       </div>
@@ -820,6 +903,70 @@
     font-size: 0.75rem;
     overflow-x: auto;
     white-space: pre-wrap;
+  }
+
+  .test-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .test-history-row {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 0.875rem 1rem;
+  }
+  .test-history-row.flaky {
+    border-color: #fbbf24;
+    background: #fffbeb;
+  }
+
+  .test-history-top {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+  }
+  .test-history-name {
+    font-weight: 500;
+  }
+
+  .flaky-badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+    white-space: nowrap;
+  }
+
+  .test-history-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.8125rem;
+    color: #6b7280;
+  }
+
+  .sparkline {
+    display: flex;
+    gap: 0.2rem;
+  }
+  .spark-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    display: inline-block;
+  }
+  .spark-dot.passed { background: #10b981; }
+  .spark-dot.failed { background: #dc2626; }
+
+  .test-history-stat {
+    white-space: nowrap;
   }
 
   @media (max-width: 640px) {
