@@ -8,16 +8,27 @@
   // pass/fail signal instead of just "N test cases" with no indication of
   // whether they've ever actually been run.
   let lastRunByPackage: Record<string, { status: string; executed_at: string }> = {};
+  // Up to the last 10 runs per package, oldest-first — for the card
+  // sparkline (each run's overall status) and for flaky detection. Flaky
+  // detection needs the per-test breakdown, not just the overall status: a
+  // package can have one consistently-broken test dragging every run's
+  // overall status to 'failed' while a *different* test inside it is
+  // genuinely flip-flopping — checked only against overall status, that
+  // case would never surface here. test_results is a small jsonb array per
+  // row, so including it costs nothing extra query-wise (still the one
+  // bounded fetch below), just a bit more payload.
+  let recentRunsByPackage: Record<string, { status: string; executed_at: string; test_results: any[] }[]> = {};
   let loading = true;
 
   let query = '';
-  let statusFilter: 'all' | 'passed' | 'failed' | 'not-run' = 'all';
+  let statusFilter: 'all' | 'passed' | 'failed' | 'not-run' | 'flaky' = 'all';
   let sortBy: 'newest' | 'oldest' | 'name' = 'newest';
 
   $: filteredPackages = packages
     .filter((p) => !query.trim() || p.name?.toLowerCase().includes(query.trim().toLowerCase()))
     .filter((p) => {
       if (statusFilter === 'all') return true;
+      if (statusFilter === 'flaky') return isFlakyPackage(p.id);
       const cls = runStatusInfo(p.id).className;
       if (statusFilter === 'failed') return cls === 'failed' || cls === 'errored';
       return cls === statusFilter;
@@ -59,20 +70,34 @@
   }
 
   async function loadLastRuns(packageIds: string[]) {
+    // Bounded window across ALL of the user's packages in one query, not one
+    // query per package — a package with very few runs relative to others
+    // may end up with fewer than 10 data points here, which is an accepted
+    // trade-off for keeping this a single lightweight fetch on a list page.
     const { data } = await supabase
       .from('test_executions')
-      .select('package_id, status, executed_at')
+      .select('package_id, status, executed_at, test_results')
       .in('package_id', packageIds)
-      .order('executed_at', { ascending: false });
+      .order('executed_at', { ascending: false })
+      .limit(300);
 
     const byPackage: typeof lastRunByPackage = {};
+    const recentByPackage: typeof recentRunsByPackage = {};
     for (const row of data || []) {
       // Rows arrive newest-first, so the first one seen per package is its latest run.
       if (!byPackage[row.package_id]) {
         byPackage[row.package_id] = row;
       }
+      if (!recentByPackage[row.package_id]) recentByPackage[row.package_id] = [];
+      if (recentByPackage[row.package_id].length < 10) {
+        recentByPackage[row.package_id].push(row);
+      }
     }
+    // Reverse each package's list to oldest-first, matching the sparkline's left-to-right reading order.
+    for (const id in recentByPackage) recentByPackage[id].reverse();
+
     lastRunByPackage = byPackage;
+    recentRunsByPackage = recentByPackage;
   }
 
   function runStatusInfo(pkgId: string) {
@@ -81,6 +106,26 @@
     if (run.status === 'passed') return { icon: '✅', label: 'Passing', className: 'passed' };
     if (run.status === 'failed') return { icon: '❌', label: 'Failing', className: 'failed' };
     return { icon: '⚠️', label: 'Run error', className: 'errored' };
+  }
+
+  // True if ANY individual test within this package's recent runs has both
+  // passed and failed — same definition as the detail page's per-test Test
+  // History tab, just computed here from the same bounded fetch rather than
+  // a separate one.
+  function isFlakyPackage(pkgId: string): boolean {
+    const runs = recentRunsByPackage[pkgId] || [];
+    const statusesByTest = new Map<string, Set<string>>();
+    for (const run of runs) {
+      for (const r of run.test_results || []) {
+        if (!r?.name) continue;
+        if (!statusesByTest.has(r.name)) statusesByTest.set(r.name, new Set());
+        statusesByTest.get(r.name)!.add(r.status === 'passed' ? 'passed' : 'failed');
+      }
+    }
+    for (const statuses of statusesByTest.values()) {
+      if (statuses.has('passed') && statuses.has('failed')) return true;
+    }
+    return false;
   }
 </script>
 
@@ -113,6 +158,7 @@
         <button class="chip" class:active={statusFilter === 'passed'} on:click={() => (statusFilter = 'passed')}>✅ Passing</button>
         <button class="chip" class:active={statusFilter === 'failed'} on:click={() => (statusFilter = 'failed')}>❌ Failing</button>
         <button class="chip" class:active={statusFilter === 'not-run'} on:click={() => (statusFilter = 'not-run')}>▶️ Not Run</button>
+        <button class="chip" class:active={statusFilter === 'flaky'} on:click={() => (statusFilter = 'flaky')}>🔁 Flaky</button>
       </div>
 
       <select class="sort-select" bind:value={sortBy}>
@@ -136,6 +182,9 @@
               {#if pkg.test_cases?.requiresReview}
                 <span class="review-badge" title="The AI used placeholder selectors for some elements — check the Test Code tab">⚠️ Needs review</span>
               {/if}
+              {#if isFlakyPackage(pkg.id)}
+                <span class="flaky-badge" title="Recent runs have flipped between passing and failing">🔁 Flaky</span>
+              {/if}
             </div>
           </div>
 
@@ -146,6 +195,14 @@
             <span>·</span>
             <span>{new Date(pkg.created_at).toLocaleDateString()}</span>
           </div>
+
+          {#if recentRunsByPackage[pkg.id]?.length > 1}
+            <div class="card-sparkline" title="Last {recentRunsByPackage[pkg.id].length} runs">
+              {#each recentRunsByPackage[pkg.id] as run}
+                <span class="spark-dot {run.status === 'passed' ? 'passed' : 'failed'}"></span>
+              {/each}
+            </div>
+          {/if}
 
           {#if pkg.test_cases?.summary?.critical || pkg.test_cases?.summary?.high}
             <div class="priority-badges">
@@ -340,6 +397,16 @@
     color: #92400e;
   }
 
+  .flaky-badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    background: #fef3c7;
+    color: #92400e;
+  }
+
   .card-meta {
     display: flex;
     gap: 0.375rem;
@@ -348,6 +415,20 @@
     color: #6b7280;
     margin-bottom: 0.5rem;
   }
+
+  .card-sparkline {
+    display: flex;
+    gap: 0.2rem;
+    margin-bottom: 0.5rem;
+  }
+  .card-sparkline .spark-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 999px;
+    display: inline-block;
+  }
+  .card-sparkline .spark-dot.passed { background: #10b981; }
+  .card-sparkline .spark-dot.failed { background: #dc2626; }
 
   .priority-badges {
     display: flex;
