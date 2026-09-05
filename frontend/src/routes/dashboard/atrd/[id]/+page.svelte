@@ -38,13 +38,27 @@
   // (see atrdParser.ts's detectUrls) — editable before generating, and left
   // blank falls back to the account's default Target Application URL.
   let targetUrl = '';
+  let usage: { used: number; limit: number; remaining: number; resetsAt: string } | null = null;
+  let limitMessage = '';
 
   $: id = $page.params.id;
 
   onMount(async () => {
     await loadATRD();
     await loadTestPackages();
+    await loadUsage();
   });
+
+  async function loadUsage() {
+    try {
+      const response = await authFetch('/api/ai/usage');
+      if (response.ok) {
+        usage = await response.json();
+      }
+    } catch (err) {
+      console.error('Error loading usage:', err);
+    }
+  }
 
   async function loadATRD() {
     loading = true;
@@ -116,6 +130,7 @@
   
   async function generateTestPackage() {
     if (!atrd) return;
+    limitMessage = '';
 
     try {
       const response = await authFetch('/api/ai/generate-test-package', {
@@ -129,13 +144,17 @@
         })
       });
 
+      const result = await response.json().catch(() => null);
+
       if (response.ok) {
-        const result = await response.json();
         alert(`✅ Test package generated! ID: ${result.id}`);
+        if (result?.usage) usage = result.usage;
         await loadTestPackages();
         showTestPackages = true;
+      } else if (result?.limitReached) {
+        limitMessage = result.error;
+        usage = { used: result.used, limit: result.limit, remaining: result.remaining, resetsAt: result.resetsAt };
       } else {
-        const result = await response.json().catch(() => null);
         alert(result?.error || 'Failed to generate test package');
       }
     } catch (err) {
@@ -350,9 +369,14 @@
             ✏️ Edit
           </button>
         {/if}
-        <button class="btn-generate" on:click={generateTestPackage}>
+        <button class="btn-generate" on:click={generateTestPackage} disabled={usage?.remaining === 0}>
           🎯 Generate Tests
         </button>
+        {#if usage}
+          <span class="usage-indicator" class:limit-hit={usage.remaining <= 0}>
+            {usage.used} of {usage.limit} free generations used this month
+          </span>
+        {/if}
         <div class="export-dropdown">
           <button class="btn-export">📥 Export ▼</button>
           <div class="dropdown-content">
@@ -365,8 +389,11 @@
           🗑️ Delete
         </button>
       </div>
+      {#if limitMessage}
+        <div class="banner limit">⚠️ {limitMessage}</div>
+      {/if}
     </div>
-    
+
     <!-- Test Packages Section -->
     {#if testPackages.length > 0 || showTestPackages}
       <div class="test-packages-section">
@@ -634,7 +661,33 @@
     background: #10b981;
     color: white;
   }
-  
+  .btn-generate:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+  }
+
+  .usage-indicator {
+    align-self: center;
+    font-size: 0.8125rem;
+    color: #6b7280;
+  }
+  .usage-indicator.limit-hit {
+    color: #92400e;
+    font-weight: 500;
+  }
+
+  .banner {
+    width: 100%;
+    border-radius: 0.5rem;
+    padding: 0.875rem 1rem;
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+  }
+  .banner.limit {
+    background: #fffbeb;
+    color: #92400e;
+  }
+
   .btn-export {
     background: #6b7280;
     color: white;

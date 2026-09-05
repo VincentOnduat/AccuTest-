@@ -32,6 +32,19 @@
   let generatedPackage: any = null;
   let activeTab = 'automated';
   let saveSuccess = false;
+  let usage: { used: number; limit: number; remaining: number; resetsAt: string } | null = null;
+
+  onMount(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+      const response = await fetch('/api/ai/usage', { headers: { Authorization: `Bearer ${token}` } });
+      if (response.ok) usage = await response.json();
+    } catch (err) {
+      console.error('Error loading usage:', err);
+    }
+  });
 
   // Domain configurations
   const domains: Domain[] = [
@@ -215,6 +228,8 @@
       const result = await response.json();
       console.log('📦 API Response:', result);
 
+      if (result.usage) usage = result.usage;
+
       // FIX: Check the actual response structure from your API
       if (result.success) {
         let testCases = [];
@@ -369,7 +384,7 @@
         <div class="error-message">{error}</div>
       {/if}
 
-      <button class="generate-btn" on:click={generatePackage} disabled={generating || !testPrompt.trim()}>
+      <button class="generate-btn" on:click={generatePackage} disabled={generating || !testPrompt.trim() || usage?.remaining === 0}>
         {#if generating}
           <span class="spinner"></span>
           <span>Generating...</span>
@@ -377,6 +392,11 @@
           <span>🚀 Generate {currentDomain.label}</span>
         {/if}
       </button>
+      {#if usage}
+        <p class="usage-indicator" class:limit-hit={usage.remaining <= 0}>
+          {usage.used} of {usage.limit} free generations used this month
+        </p>
+      {/if}
     </div>
   {:else}
     <div class="results-section">
@@ -555,6 +575,17 @@
   .generate-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .usage-indicator {
+    text-align: center;
+    font-size: 0.8125rem;
+    color: #6b7280;
+    margin: 0.5rem 0 0 0;
+  }
+  .usage-indicator.limit-hit {
+    color: #92400e;
+    font-weight: 500;
   }
 
   .spinner {

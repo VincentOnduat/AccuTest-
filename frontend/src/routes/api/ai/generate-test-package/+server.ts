@@ -15,6 +15,7 @@ import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/publi
 import { env as privateEnv } from '$env/dynamic/private';
 import { assertSafeTargetUrl, UnsafeTargetUrlError } from '$lib/server/targetUrl';
 import { checkRateLimit } from '$lib/server/rateLimit';
+import { getMonthlyUsage, recordGeneration, upgradeMessage } from '$lib/server/generationUsage';
 
 const TEST_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'] as const;
 
@@ -148,6 +149,16 @@ export async function POST({ request }) {
       );
     }
 
+    // Free-tier monthly cap — checked before any real work, so a blocked
+    // request costs nothing beyond one count query.
+    const usage = await getMonthlyUsage(supabase, user.id);
+    if (usage.remaining <= 0) {
+      return json(
+        { error: upgradeMessage(), limitReached: true, ...usage },
+        { status: 402 }
+      );
+    }
+
     const body = await request.json();
     const { document, name, framework = 'playwright', testDomain = 'functional', atrdId, targetUrl } = body;
 
@@ -237,7 +248,21 @@ export async function POST({ request }) {
       console.error('Database error:', dbError);
       return json({ error: dbError.message }, { status: 500 });
     }
-    
+
+    // Record usage only after a real, saved generation — a failed attempt
+    // (missing key, AI error, DB error above) never reaches here, so it
+    // never counts against the cap.
+    let usageAfter = usage;
+    try {
+      await recordGeneration(supabase, user.id);
+      usageAfter = { ...usage, used: usage.used + 1, remaining: Math.max(0, usage.remaining - 1) };
+    } catch (usageError) {
+      // The generation itself already succeeded and is saved — don't fail
+      // the whole request over a usage-logging error. Worst case, this one
+      // generation doesn't count against the cap.
+      console.error('Failed to record generation usage:', usageError);
+    }
+
     return json({
       success: true,
       id: data.id,
@@ -245,7 +270,8 @@ export async function POST({ request }) {
       testCode: testCode,
       requiresReview: requiresReview,
       unresolvedFields: unresolvedFields,
-      summary: testPackage.summary
+      summary: testPackage.summary,
+      usage: usageAfter
     });
     
   } catch (error) {
