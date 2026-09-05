@@ -49,9 +49,10 @@
 |---------|--------|-------------|
 | 🔐 User Authentication | ✅ | Supabase auth with email/password, self-serve sign up |
 | 📋 ATRD Management | ✅ | Create, view, parse, and delete ATRD documents |
-| 🤖 AI Test Generation | ✅ | Generate tests for 6 domains (Functional, Performance, Security, Accessibility, Visual, Data/ETL) |
+| 🤖 AI Test Generation | ✅ | Real GPT-4o calls generate tests for 6 domains (Functional, Performance, Security, Accessibility, Visual, Data/ETL), grounded in the ATRD's own wording — a selector or route the document doesn't specify gets flagged as a placeholder for review rather than guessed. Capped at 5 free generations per user per month |
 | 🧪 Test Packages | ✅ | Create and manage test packages with automated code |
 | ▶️ Test Execution | ✅ | Real execution of generated Playwright test code against a configurable target URL, with real pass/fail results |
+| 🔁 Flaky Test Detection | ✅ | Per-test pass/fail history across runs, with a rolling flaky flag (mixed pass/fail in the last 10 runs) surfaced on both the package list and package detail views |
 | 📊 Dashboard Analytics | ✅ | Real-time stats, recent sessions, tasks, and packages |
 | 🔄 Test Sessions | ✅ | Create and manage test execution sessions |
 | ✅ Task Management | ✅ | Create and track tasks with priority levels |
@@ -150,7 +151,7 @@ SvelteKit's own server routes.
 
 ## 🔌 API Endpoints
 
-The SvelteKit app serves its own server routes under `/api/*` (e.g. `ai/generate-test-package`, `ai/parse-atrd`, `atrd/*`, `packages/*`, `reports/*`, `business-reports/*`, `test-executions/*`, `test-runner`, `notifications`, `health`) that talk to Supabase and OpenAI directly from the server — see `frontend/src/routes/api/`.
+The SvelteKit app serves its own server routes under `/api/*` (e.g. `ai/generate-test-package`, `ai/parse-atrd`, `ai/usage`, `atrd/*`, `packages/*`, `reports/*`, `business-reports/*`, `test-executions/*`, `test-runner`, `notifications`, `health`) that talk to Supabase and OpenAI directly from the server — see `frontend/src/routes/api/`.
 
 ## 🗄️ Database Schema
 
@@ -167,6 +168,7 @@ Data is stored in Supabase PostgreSQL. Core tables referenced by the app include
 | `test_executions` | Execution history and results |
 | `business_reports` | Generated analytics/business reports |
 | `notifications` | User notifications |
+| `ai_generation_usage` | One row per successful AI generation, per user — an immutable log backing the 5/month free-tier cap and never derived from `test_packages` (which can be deleted) |
 
 SQL migrations live in `frontend/migrations/`. Row-level security policies and full column definitions are managed in the Supabase project directly.
 
