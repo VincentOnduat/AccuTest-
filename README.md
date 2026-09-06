@@ -39,7 +39,7 @@
 
 ## 🎯 About
 
-**AccuTest** is a comprehensive test automation platform that transforms requirements into actionable test cases with surgical precision. Leveraging OpenAI's GPT models, it parses Automation Test Requirement Documents (ATRDs), generates executable test code, tracks execution metrics, and provides deep analytics with business insights.
+**AccuTest** generates real Playwright tests from your requirements, runs them for real, and remembers what it learns. Every run is scored — which tests are flaky, which selectors actually hold up on your site — and that history feeds back into the next generation for the same site, so the output compounds instead of starting from a blank guess each time. Leveraging OpenAI's GPT models, it parses Automation Test Requirement Documents (ATRDs), generates executable test code across 6 domains, executes it for real, and tracks the results.
 
 ## ✨ Features
 
