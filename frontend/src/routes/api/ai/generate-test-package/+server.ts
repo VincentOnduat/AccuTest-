@@ -16,7 +16,7 @@ import { env as privateEnv } from '$env/dynamic/private';
 import { assertSafeTargetUrl, UnsafeTargetUrlError } from '$lib/server/targetUrl';
 import { checkRateLimit } from '$lib/server/rateLimit';
 import { getMonthlyUsage, recordGeneration, upgradeMessage } from '$lib/server/generationUsage';
-import { getSelectorMemoryForHost, formatSelectorMemoryForPrompt } from '$lib/server/selectorMemory';
+import { getSelectorMemoryForHost, formatSelectorMemoryForPrompt, computeSelectorMemoryImpact } from '$lib/server/selectorMemory';
 
 const TEST_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'] as const;
 
@@ -230,6 +230,11 @@ export async function POST({ request }) {
       return json({ error: 'Test generation failed — the AI service did not return a usable result' }, { status: 502 });
     }
 
+    // Makes the loop's value visible at the moment a user would otherwise be
+    // comparing this to a free chat tool, rather than only in a package's
+    // History tab later — see computeSelectorMemoryImpact's own comment.
+    const selectorMemoryImpact = computeSelectorMemoryImpact(testCode, selectorMemory);
+
     const testPackage = {
       testCases: testCases,
       executableCode: testCode,
@@ -288,7 +293,8 @@ export async function POST({ request }) {
       requiresReview: requiresReview,
       unresolvedFields: unresolvedFields,
       summary: testPackage.summary,
-      usage: usageAfter
+      usage: usageAfter,
+      selectorMemoryImpact
     });
     
   } catch (error) {

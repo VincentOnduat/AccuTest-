@@ -295,3 +295,35 @@ export function formatSelectorMemoryForPrompt(memory: SelectorMemory): string {
 
   return lines.join('\n');
 }
+
+export interface SelectorMemoryImpact {
+  reusedReliableCount: number;
+  /** Sum of successCount across just the reliable selectors this generation actually reused — not a global run count for the site. */
+  pastRunsCovered: number;
+}
+
+/**
+ * How much this specific generation actually drew on selector memory — not just
+ * "memory existed for this site," but "the code just written reused a specific
+ * locator this account has seen hold up before." Returns null when there's
+ * nothing worth reporting (brand-new site, or a generation that happened not to
+ * reuse any selector with a track record).
+ *
+ * Deliberately doesn't try to claim credit for "avoiding" a known-flaky selector:
+ * a generated file simply not containing that selector string is true of almost
+ * any code, including code that has nothing to do with that part of the page —
+ * absence isn't evidence the model steered around it on purpose, and reporting it
+ * as if it were would be the same kind of overclaim this loop is supposed to be
+ * an honest alternative to.
+ */
+export function computeSelectorMemoryImpact(generatedCode: string, memory: SelectorMemory): SelectorMemoryImpact | null {
+  const generatedSelectors = new Set(extractSelectorsFromCode(generatedCode).map((s) => s.selector));
+  const reusedReliable = memory.reliable.filter((r) => generatedSelectors.has(r.selector));
+
+  if (reusedReliable.length === 0) return null;
+
+  return {
+    reusedReliableCount: reusedReliable.length,
+    pastRunsCovered: reusedReliable.reduce((sum, r) => sum + r.successCount, 0)
+  };
+}
