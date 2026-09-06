@@ -16,6 +16,7 @@ import { env as privateEnv } from '$env/dynamic/private';
 import { assertSafeTargetUrl, UnsafeTargetUrlError } from '$lib/server/targetUrl';
 import { checkRateLimit } from '$lib/server/rateLimit';
 import { getMonthlyUsage, recordGeneration, upgradeMessage } from '$lib/server/generationUsage';
+import { getSelectorMemoryForHost, formatSelectorMemoryForPrompt } from '$lib/server/selectorMemory';
 
 const TEST_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'] as const;
 
@@ -50,7 +51,7 @@ const FRAMEWORK_LABELS: Record<string, string> = {
   vitest: 'Jest'
 };
 
-function buildPrompt(document: string, testDomain: string, framework: string) {
+function buildPrompt(document: string, testDomain: string, framework: string, selectorMemorySection: string) {
   const frameworkLabel = FRAMEWORK_LABELS[framework] || 'Playwright (@playwright/test)';
 
   const system = `You are an expert test automation engineer. Given an Automation Test \
@@ -100,7 +101,7 @@ if every selector and route the code uses was grounded in an explicit statement 
 (or is the bare '/').
 - unresolvedFields: the exact list of <snake_case_name> placeholders used in the code (empty \
 array if requiresReview is false). Each entry should be short and specific — e.g. \
-"shipping_address_input", "login_page_route" — not a vague "form field".`;
+"shipping_address_input", "login_page_route" — not a vague "form field".${selectorMemorySection}`;
 
   const prompt = `Test domain: ${testDomain}
 Target framework: ${frameworkLabel}
@@ -189,8 +190,24 @@ export async function POST({ request }) {
       }
     }
 
+    // The other half of the selector-memory loop (see lib/server/selectorMemory.ts):
+    // api/test-runner writes real pass/fail history for this site's locators after
+    // every run; this reads it back before generating new code for the same site,
+    // so each generation can build on what's actually been verified to work rather
+    // than starting from nothing every time. A package without its own target URL
+    // still runs against the account-wide default from Settings (see api/test-runner),
+    // so fall back to that same default here too — otherwise memory would never kick
+    // in for the common case of one default site and several packages against it.
+    let memoryLookupHost: string | null = normalizedTargetUrl;
+    if (!memoryLookupHost) {
+      const { data: profile } = await supabase.from('profiles').select('target_url').eq('id', user.id).single();
+      memoryLookupHost = profile?.target_url || null;
+    }
+    const selectorMemory = await getSelectorMemoryForHost(supabase, user.id, memoryLookupHost);
+    const selectorMemorySection = formatSelectorMemoryForPrompt(selectorMemory);
+
     const openai = createOpenAI({ apiKey: OPENAI_API_KEY });
-    const { system, prompt } = buildPrompt(document, testDomain, framework);
+    const { system, prompt } = buildPrompt(document, testDomain, framework, selectorMemorySection);
 
     let testCode: string;
     let testCases: z.infer<typeof TestPackageSchema>['testCases'];
