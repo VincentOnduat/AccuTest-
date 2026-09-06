@@ -1,4 +1,19 @@
 <script lang="ts">
+  const steps = [
+    {
+      title: 'Upload your requirements',
+      body: 'Drop in an ATRD (Automation Test Requirement Document) — plain requirements, no special format needed.'
+    },
+    {
+      title: 'Run it for real, repeatedly',
+      body: 'GPT writes executable Playwright code, then AccuTest actually runs it against your site and keeps every result — not a one-off.'
+    },
+    {
+      title: 'Watch the loop compound',
+      body: 'Flaky tests surface automatically from that history, and the next generation for the same site is handed its known-reliable and known-flaky selectors — so it gets better, not just faster.'
+    }
+  ];
+
   const domains = [
     { icon: '⚙️', name: 'Functional' },
     { icon: '⚡', name: 'Performance' },
@@ -7,28 +22,13 @@
     { icon: '🖼️', name: 'Visual' },
     { icon: '🗃️', name: 'Data / ETL' }
   ];
-
-  const steps = [
-    {
-      title: 'Upload your requirements',
-      body: 'Drop in an ATRD (Automation Test Requirement Document) — plain requirements, no special format needed.'
-    },
-    {
-      title: 'Generates real test code',
-      body: 'GPT parses the document and writes executable Playwright, Cypress, Jest, or k6 code across six test domains.'
-    },
-    {
-      title: 'Run it and see real results',
-      body: 'Execute the generated Playwright tests against your app and get real pass/fail results — not a simulation.'
-    }
-  ];
 </script>
 
 <svelte:head>
-  <title>AccuTest — Precision Test Automation</title>
+  <title>AccuTest — Flaky Test Detection That Learns Your Site</title>
   <meta
     name="description"
-    content="Turn requirement documents into executable test code, then actually run it. AccuTest parses ATRDs, generates Playwright/Cypress/Jest/k6 tests, and executes them for real results."
+    content="AccuTest generates real Playwright tests from your requirements, runs them for real, and remembers what it learns — flagging flaky tests automatically and feeding known-reliable selectors back into every new test it writes for your site."
   />
 </svelte:head>
 
@@ -45,11 +45,12 @@
 
   <section class="hero">
     <div class="hero-inner">
-      <h1>Requirements in. Real tests running out.</h1>
+      <h1>Tests that get less flaky the more you run them.</h1>
       <p class="lead">
-        AccuTest turns your requirement documents into executable test code across six
-        domains — then actually runs it, so you get real pass/fail results instead of a
-        pile of untested scripts.
+        A one-off chat with an AI can write you a test. It can't tell you which of your
+        selectors have quietly started failing, or remember what actually held up last
+        time. AccuTest runs your tests for real, tracks every result, and uses that
+        history — not a fresh guess — every time it writes the next one.
       </p>
       <div class="hero-actions">
         <a href="/signup" class="btn-primary">Get Started Free</a>
@@ -58,20 +59,8 @@
     </div>
   </section>
 
-  <section class="domains">
-    <h2>Six test domains, one workflow</h2>
-    <div class="domain-grid">
-      {#each domains as d}
-        <div class="domain-card">
-          <span class="domain-icon">{d.icon}</span>
-          <span>{d.name}</span>
-        </div>
-      {/each}
-    </div>
-  </section>
-
   <section class="steps">
-    <h2>How it works</h2>
+    <h2>How the loop works</h2>
     <div class="steps-grid">
       {#each steps as step, i}
         <div class="step-card">
@@ -84,24 +73,36 @@
   </section>
 
   <section class="features">
-    <h2>Everything you need to track it</h2>
+    <h2>Built around execution history, not just generation</h2>
     <div class="feature-grid">
       <div class="feature">
-        <h3>📊 Dashboard analytics</h3>
-        <p>Real-time stats across sessions, packages, and tasks.</p>
+        <h3>🔁 Flaky test detection</h3>
+        <p>Every test's pass/fail record across its last 10 runs, surfaced automatically — a rolling flag, not a one-time guess, so a test that's settled down stops being flagged.</p>
       </div>
       <div class="feature">
-        <h3>🔄 Test sessions</h3>
-        <p>Group and manage runs across your test suites.</p>
-      </div>
-      <div class="feature">
-        <h3>✅ Task management</h3>
-        <p>Track follow-up work with priority levels, tied back to source requirements.</p>
+        <h3>🧠 Selector memory</h3>
+        <p>Locators are scored per site from real runs. The next generation for that site is told which have held up and which keep breaking — the one thing a stateless chat prompt can never know.</p>
       </div>
       <div class="feature">
         <h3>▶️ Real execution</h3>
-        <p>Generated Playwright tests run for real against a target URL you configure — actual pass/fail, not a coin flip.</p>
+        <p>Generated Playwright tests run for real against a target URL you configure — actual pass/fail, not a simulation.</p>
       </div>
+      <div class="feature">
+        <h3>📊 Dashboard analytics</h3>
+        <p>Real-time stats across sessions, packages, and tasks, all tied back to the requirements they came from.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="domains">
+    <h2>Also generates across six test domains</h2>
+    <div class="domain-grid">
+      {#each domains as d}
+        <div class="domain-card">
+          <span class="domain-icon">{d.icon}</span>
+          <span>{d.name}</span>
+        </div>
+      {/each}
     </div>
   </section>
 

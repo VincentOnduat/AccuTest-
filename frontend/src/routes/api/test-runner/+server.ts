@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
 import { runPlaywrightCode, REAL_EXECUTION_FRAMEWORKS } from '$lib/server/testRunner';
 import { assertSafeTargetUrl, UnsafeTargetUrlError } from '$lib/server/targetUrl';
+import { recordSelectorOutcomes } from '$lib/server/selectorMemory';
 
 export async function POST({ request, cookies }) {
   try {
@@ -139,6 +140,16 @@ export async function POST({ request, cookies }) {
 
     if (execError) {
       return json({ error: execError.message }, { status: 500 });
+    }
+
+    // Write side of the selector-memory loop (see lib/server/selectorMemory.ts) — score
+    // this run's real per-test outcomes against the locators the generated code actually
+    // used, so the next generation for this site can build on it. Best-effort: a failure
+    // here shouldn't fail a test run that already completed and is already saved above.
+    try {
+      await recordSelectorOutcomes(supabase, user.id, baseUrl, code, run.results);
+    } catch (memoryError) {
+      console.error('Failed to record selector memory:', memoryError);
     }
 
     return json({

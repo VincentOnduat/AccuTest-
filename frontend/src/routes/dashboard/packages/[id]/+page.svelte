@@ -18,6 +18,11 @@
   // Run Results tab.
   let executions: any[] = [];
   let selectedExecutionId: string | null = null;
+  // This package's site's selector memory (see lib/server/selectorMemory.ts) — real
+  // pass/fail history for the locators generated code has actually used against this
+  // host, across every package run against it, not just this one. Empty until the
+  // site has been run enough times to have a verdict on any given selector.
+  let selectorMemory: { reliable: any[]; risky: any[] } = { reliable: [], risky: [] };
 
   $: id = $page.params.id;
   $: selectedExecution = executions.find((e) => e.id === selectedExecutionId) || executions[0] || null;
@@ -93,6 +98,7 @@
       if (response.ok) {
         const result = await response.json();
         pkg = result.data || result;
+        if (pkg?.target_url) await loadSelectorMemory(pkg.target_url);
       } else if (response.status === 404) {
         error = 'Package not found';
       } else {
@@ -113,6 +119,32 @@
       .eq('package_id', id)
       .order('executed_at', { ascending: false });
     executions = data || [];
+  }
+
+  async function loadSelectorMemory(targetUrl: string) {
+    let host: string;
+    try {
+      host = new URL(targetUrl).hostname;
+    } catch {
+      return;
+    }
+
+    const { data } = await supabase
+      .from('selector_memory')
+      .select('selector, selector_kind, success_count, failure_count, last_error')
+      .eq('target_host', host);
+
+    const records = data || [];
+    selectorMemory = {
+      reliable: records
+        .filter((r) => r.failure_count === 0 && r.success_count >= 2)
+        .sort((a, b) => b.success_count - a.success_count)
+        .slice(0, 8),
+      risky: records
+        .filter((r) => r.failure_count >= 2 && r.failure_count >= r.success_count)
+        .sort((a, b) => b.failure_count - a.failure_count)
+        .slice(0, 8)
+    };
   }
 
   async function deletePackage() {
@@ -486,6 +518,39 @@
                 </div>
               </div>
             {/each}
+          </div>
+        {/if}
+
+        {#if selectorMemory.reliable.length > 0 || selectorMemory.risky.length > 0}
+          <div class="selector-memory">
+            <h3>Selector memory for this site</h3>
+            <p class="selector-memory-hint">
+              Real pass/fail history for locators used across every package run against this site — not just this
+              one. The next AI generation for this site is shown this same history, so it can build on locators
+              that have actually held up instead of guessing fresh each time.
+            </p>
+            {#if selectorMemory.risky.length > 0}
+              <div class="selector-list">
+                <span class="selector-list-label">⚠️ Flaky — fails at least as often as it passes</span>
+                {#each selectorMemory.risky as s}
+                  <div class="selector-row risky">
+                    <code>{s.selector}</code>
+                    <span class="selector-stat">{s.success_count} passed / {s.failure_count} failed</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            {#if selectorMemory.reliable.length > 0}
+              <div class="selector-list">
+                <span class="selector-list-label">✅ Reliable — passed repeatedly, never failed</span>
+                {#each selectorMemory.reliable as s}
+                  <div class="selector-row reliable">
+                    <code>{s.selector}</code>
+                    <span class="selector-stat">{s.success_count} passed</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -966,6 +1031,61 @@
   .spark-dot.failed { background: #dc2626; }
 
   .test-history-stat {
+    white-space: nowrap;
+  }
+
+  .selector-memory {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+  }
+  .selector-memory h3 {
+    margin: 0 0 0.375rem 0;
+    font-size: 1rem;
+  }
+  .selector-memory-hint {
+    margin: 0 0 1rem 0;
+    font-size: 0.8125rem;
+    color: #6b7280;
+    max-width: 60ch;
+  }
+  .selector-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .selector-list:last-child {
+    margin-bottom: 0;
+  }
+  .selector-list-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #6b7280;
+  }
+  .selector-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-left: 4px solid #10b981;
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+  }
+  .selector-row.risky {
+    border-left-color: #fbbf24;
+    background: #fffbeb;
+  }
+  .selector-row code {
+    font-size: 0.8125rem;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .selector-stat {
+    font-size: 0.75rem;
+    color: #6b7280;
     white-space: nowrap;
   }
 

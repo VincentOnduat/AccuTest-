@@ -39,7 +39,7 @@
 
 ## 🎯 About
 
-**AccuTest** is a comprehensive test automation platform that transforms requirements into actionable test cases with surgical precision. Leveraging OpenAI's GPT models, it parses Automation Test Requirement Documents (ATRDs), generates executable test code, tracks execution metrics, and provides deep analytics with business insights.
+**AccuTest** generates real Playwright tests from your requirements, runs them for real, and remembers what it learns. Every run is scored — which tests are flaky, which selectors actually hold up on your site — and that history feeds back into the next generation for the same site, so the output compounds instead of starting from a blank guess each time. Leveraging OpenAI's GPT models, it parses Automation Test Requirement Documents (ATRDs), generates executable test code across 6 domains, executes it for real, and tracks the results.
 
 ## ✨ Features
 
@@ -53,6 +53,7 @@
 | 🧪 Test Packages | ✅ | Create and manage test packages with automated code |
 | ▶️ Test Execution | ✅ | Real execution of generated Playwright test code against a configurable target URL, with real pass/fail results |
 | 🔁 Flaky Test Detection | ✅ | Per-test pass/fail history across runs, with a rolling flaky flag (mixed pass/fail in the last 10 runs) surfaced on both the package list and package detail views |
+| 🧠 Selector Memory | ✅ | Locators used by generated code are scored per-site from real run outcomes; the next AI generation for that site is given its known-reliable and known-flaky selectors so it can build on what's actually held up rather than guessing fresh each time |
 | 📊 Dashboard Analytics | ✅ | Real-time stats, recent sessions, tasks, and packages |
 | 🔄 Test Sessions | ✅ | Create and manage test execution sessions |
 | ✅ Task Management | ✅ | Create and track tasks with priority levels |
@@ -169,6 +170,7 @@ Data is stored in Supabase PostgreSQL. Core tables referenced by the app include
 | `business_reports` | Generated analytics/business reports |
 | `notifications` | User notifications |
 | `ai_generation_usage` | One row per successful AI generation, per user — an immutable log backing the 5/month free-tier cap and never derived from `test_packages` (which can be deleted) |
+| `selector_memory` | One row per (user, site hostname, locator) — real success/failure counts from execution, read back into the next AI generation for that site (see Selector Memory above) |
 
 SQL migrations live in `frontend/migrations/`. Row-level security policies and full column definitions are managed in the Supabase project directly.
 
