@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
+  import { confirmDialog } from '$lib/stores/confirmDialog';
 
   let task: any = null;
   let loading = true;
@@ -50,7 +51,13 @@
   }
 
   async function deleteTask() {
-    if (!confirm('Delete this task? This cannot be undone.')) return;
+    const confirmed = await confirmDialog({
+      title: 'Delete this task?',
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
     const { error: deleteError } = await supabase.from('tasks').delete().eq('id', taskId);
     if (deleteError) {
       error = deleteError.message;

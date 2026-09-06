@@ -2,7 +2,9 @@
   import { supabase } from '$lib/supabase';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  
+  import { confirmDialog } from '$lib/stores/confirmDialog';
+  import { toast } from '$lib/stores/toast';
+
   let atrds: any[] = [];
   let loading = true;
   let error = '';
@@ -52,21 +54,28 @@
   }
   
   async function deleteATRD(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
-    
+    const confirmed = await confirmDialog({
+      title: `Delete "${name}"?`,
+      message: 'This also deletes any test packages generated from this ATRD. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
+
     try {
       const response = await authFetch(`/api/atrd/${id}`, {
         method: 'DELETE'
       });
-      
+
       if (response.ok) {
+        toast.success(`"${name}" deleted.`);
         await loadATRDs();
       } else {
-        alert('Failed to delete');
+        toast.error('Failed to delete ATRD.');
       }
     } catch (err) {
       console.error('Delete error:', err);
-      alert('Error deleting');
+      toast.error('Error deleting ATRD.');
     }
   }
   

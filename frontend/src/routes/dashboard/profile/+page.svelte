@@ -2,7 +2,8 @@
   import { supabase } from '$lib/supabase';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  
+  import { toast } from '$lib/stores/toast';
+
   let user: any = null;
   let loading = true;
   let saving = false;
@@ -22,6 +23,26 @@
     totalTestPackages: 0,
     totalExecutions: 0
   };
+
+  // Inline email/password change forms — real input fields instead of the
+  // browser's native prompt(), which shows a password in plain text as it's
+  // typed and looks different in every browser.
+  let showEmailForm = false;
+  let newEmailInput = '';
+  let emailSaving = false;
+
+  let showPasswordForm = false;
+  let newPasswordInput = '';
+  let confirmPasswordInput = '';
+  let passwordSaving = false;
+
+  // A small action instead of the `autofocus` attribute: it focuses the field once,
+  // right when it's actually inserted (i.e. when the form opens) — `autofocus` fires
+  // unconditionally on render and is flagged by a11y tooling for stealing focus from
+  // whatever a screen reader user was doing without that context.
+  function focusOnMount(node: HTMLElement) {
+    node.focus();
+  }
   
   onMount(async () => {
     await loadProfile();
@@ -94,8 +115,7 @@
   
   async function saveProfile() {
     saving = true;
-    message = '';
-    
+
     try {
       // First, check if profile exists
       const { data: existingProfile } = await supabase
@@ -134,59 +154,68 @@
       }
       
       if (result.error) throw result.error;
-      
-      message = '✅ Profile saved successfully!';
-      messageType = 'success';
-      setTimeout(() => message = '', 3000);
-      
+
+      toast.success('Profile saved.');
     } catch (err: any) {
       console.error('Error saving profile:', err);
-      message = `❌ Failed to save: ${err.message || 'Unknown error'}`;
-      messageType = 'error';
+      toast.error(`Failed to save: ${err.message || 'Unknown error'}`);
     } finally {
       saving = false;
     }
   }
   
-  async function updatePassword() {
-    const newPassword = prompt('Enter new password (minimum 6 characters):');
-    if (!newPassword) return;
-    if (newPassword.length < 6) {
-      alert('Password must be at least 6 characters');
+  function openPasswordForm() {
+    newPasswordInput = '';
+    confirmPasswordInput = '';
+    showPasswordForm = true;
+  }
+
+  async function submitPassword() {
+    if (newPasswordInput.length < 6) {
+      toast.error('Password must be at least 6 characters.');
       return;
     }
-    
+    if (newPasswordInput !== confirmPasswordInput) {
+      toast.error("Passwords don't match.");
+      return;
+    }
+
+    passwordSaving = true;
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-      
+      const { error } = await supabase.auth.updateUser({ password: newPasswordInput });
       if (error) throw error;
-      alert('✅ Password updated successfully!');
+      toast.success('Password updated.');
+      showPasswordForm = false;
     } catch (err: any) {
       console.error('Error updating password:', err);
-      alert('❌ Failed to update password: ' + (err.message || 'Unknown error'));
+      toast.error('Failed to update password: ' + (err.message || 'Unknown error'));
+    } finally {
+      passwordSaving = false;
     }
   }
-  
-  async function updateEmail() {
-    const newEmail = prompt('Enter new email address:');
-    if (!newEmail) return;
-    if (!newEmail.includes('@')) {
-      alert('Please enter a valid email address');
+
+  function openEmailForm() {
+    newEmailInput = '';
+    showEmailForm = true;
+  }
+
+  async function submitEmail() {
+    if (!newEmailInput.includes('@')) {
+      toast.error('Enter a valid email address.');
       return;
     }
-    
+
+    emailSaving = true;
     try {
-      const { error } = await supabase.auth.updateUser({
-        email: newEmail
-      });
-      
+      const { error } = await supabase.auth.updateUser({ email: newEmailInput });
       if (error) throw error;
-      alert('✅ Email update confirmation sent to your new email address!');
+      toast.success('Confirmation email sent to your new address — it takes effect once you confirm it.');
+      showEmailForm = false;
     } catch (err: any) {
       console.error('Error updating email:', err);
-      alert('❌ Failed to update email: ' + (err.message || 'Unknown error'));
+      toast.error('Failed to update email: ' + (err.message || 'Unknown error'));
+    } finally {
+      emailSaving = false;
     }
   }
 </script>
@@ -291,19 +320,51 @@
         <div class="info-row">
           <div class="info-label">Email Address</div>
           <div class="info-value">{user?.email}</div>
-          <button class="btn-secondary small" on:click={updateEmail}>
-            Change
-          </button>
+          {#if !showEmailForm}
+            <button class="btn-secondary small" on:click={openEmailForm}>
+              Change
+            </button>
+          {/if}
         </div>
-        
+        {#if showEmailForm}
+          <form class="inline-change-form" on:submit|preventDefault={submitEmail}>
+            <div class="form-group">
+              <label for="new-email">New email address</label>
+              <input id="new-email" type="email" bind:value={newEmailInput} placeholder="you@example.com" required use:focusOnMount />
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary" disabled={emailSaving}>{emailSaving ? 'Sending…' : 'Send confirmation'}</button>
+              <button type="button" class="btn-secondary small" on:click={() => (showEmailForm = false)}>Cancel</button>
+            </div>
+          </form>
+        {/if}
+
         <div class="info-row">
           <div class="info-label">Password</div>
           <div class="info-value">••••••••</div>
-          <button class="btn-secondary small" on:click={updatePassword}>
-            Change
-          </button>
+          {#if !showPasswordForm}
+            <button class="btn-secondary small" on:click={openPasswordForm}>
+              Change
+            </button>
+          {/if}
         </div>
-        
+        {#if showPasswordForm}
+          <form class="inline-change-form" on:submit|preventDefault={submitPassword}>
+            <div class="form-group">
+              <label for="new-password">New password</label>
+              <input id="new-password" type="password" bind:value={newPasswordInput} placeholder="At least 6 characters" required use:focusOnMount />
+            </div>
+            <div class="form-group">
+              <label for="confirm-password">Confirm new password</label>
+              <input id="confirm-password" type="password" bind:value={confirmPasswordInput} required />
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary" disabled={passwordSaving}>{passwordSaving ? 'Saving…' : 'Update password'}</button>
+              <button type="button" class="btn-secondary small" on:click={() => (showPasswordForm = false)}>Cancel</button>
+            </div>
+          </form>
+        {/if}
+
         <div class="info-row">
           <div class="info-label">Account Created</div>
           <div class="info-value">{new Date(user?.created_at || Date.now()).toLocaleDateString()}</div>
@@ -517,7 +578,20 @@
     font-size: 0.875rem;
     color: #1f2937;
   }
-  
+
+  .inline-change-form {
+    padding: 0.75rem 0 1rem;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .inline-change-form .form-group {
+    max-width: 320px;
+  }
+  .inline-change-form .form-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0;
+  }
+
   .loading-state {
     text-align: center;
     padding: 4rem;
