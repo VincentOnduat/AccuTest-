@@ -3,6 +3,8 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabase';
+  import { confirmDialog } from '$lib/stores/confirmDialog';
+  import { toast } from '$lib/stores/toast';
 
   // Auth fetch helper — attaches the Bearer token, mirroring the pattern used
   // on the main dashboard and ATRD list pages. Plain fetch() with only
@@ -115,14 +117,14 @@
         atrd.name = editName;
         atrd.content = editContent;
         isEditing = false;
-        alert('ATRD updated successfully!');
+        toast.success('ATRD updated.');
       } else {
         const error = await response.json();
-        alert('Failed to update: ' + error.error);
+        toast.error('Failed to update: ' + error.error);
       }
     } catch (err) {
       console.error('Save error:', err);
-      alert('Error saving changes');
+      toast.error('Error saving changes.');
     } finally {
       saving = false;
     }
@@ -147,7 +149,7 @@
       const result = await response.json().catch(() => null);
 
       if (response.ok) {
-        alert(`✅ Test package generated! ID: ${result.id}`);
+        toast.success('Test package generated.');
         if (result?.usage) usage = result.usage;
         await loadTestPackages();
         showTestPackages = true;
@@ -155,28 +157,34 @@
         limitMessage = result.error;
         usage = { used: result.used, limit: result.limit, remaining: result.remaining, resetsAt: result.resetsAt };
       } else {
-        alert(result?.error || 'Failed to generate test package');
+        toast.error(result?.error || 'Failed to generate test package.');
       }
     } catch (err) {
       console.error('Generation error:', err);
-      alert('Error generating test package');
+      toast.error('Error generating test package.');
     }
   }
   
   async function deleteATRD() {
-    if (!confirm('Delete this ATRD? This will also delete all associated test packages.')) return;
-    
+    const confirmed = await confirmDialog({
+      title: 'Delete this ATRD?',
+      message: 'This will also delete all associated test packages. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
+
     try {
       const response = await authFetch(`/api/atrd/${id}`, { method: 'DELETE' });
-      
+
       if (response.ok) {
         goto('/dashboard/atrd');
       } else {
-        alert('Failed to delete');
+        toast.error('Failed to delete ATRD.');
       }
     } catch (err) {
       console.error('Delete error:', err);
-      alert('Error deleting');
+      toast.error('Error deleting ATRD.');
     }
   }
   

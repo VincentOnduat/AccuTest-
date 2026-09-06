@@ -3,6 +3,8 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
+  import { confirmDialog } from '$lib/stores/confirmDialog';
+  import { toast } from '$lib/stores/toast';
 
   let session: any = null;
   let loading = true;
@@ -76,10 +78,20 @@
   }
 
   async function deleteSession() {
-    if (confirm('Are you sure you want to delete this session?')) {
-      await supabase.from('sessions').delete().eq('id', sessionId);
-      goto('/dashboard/sessions');
+    const confirmed = await confirmDialog({
+      title: 'Delete this session?',
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
+
+    const { error: deleteError } = await supabase.from('sessions').delete().eq('id', sessionId);
+    if (deleteError) {
+      toast.error(`Failed to delete session: ${deleteError.message}`);
+      return;
     }
+    goto('/dashboard/sessions');
   }
 </script>
 
