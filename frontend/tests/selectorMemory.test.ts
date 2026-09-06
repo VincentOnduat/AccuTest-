@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { extractSelectorsFromCode, extractTestBlocks, formatSelectorMemoryForPrompt } from '../src/lib/server/selectorMemory';
+import {
+  extractSelectorsFromCode,
+  extractTestBlocks,
+  formatSelectorMemoryForPrompt,
+  computeSelectorMemoryImpact
+} from '../src/lib/server/selectorMemory';
 
 describe('extractSelectorsFromCode', () => {
   it('extracts getBy* locators, folding a name option into the same selector', () => {
@@ -118,5 +123,43 @@ describe('formatSelectorMemoryForPrompt', () => {
     expect(text).toContain('Timeout waiting for locator');
     expect(text).toContain('Known-reliable locators');
     expect(text).toContain('Known-flaky locators');
+  });
+});
+
+describe('computeSelectorMemoryImpact', () => {
+  const memory = {
+    reliable: [
+      { selector: 'getByTestId("login-btn")', kind: 'testid', successCount: 5, failureCount: 0, lastError: null },
+      { selector: 'getByTestId("logout-btn")', kind: 'testid', successCount: 7, failureCount: 0, lastError: null }
+    ],
+    risky: [{ selector: 'locator(".submit-btn")', kind: 'css', successCount: 1, failureCount: 3, lastError: 'Timeout' }]
+  };
+
+  it('returns null when the generated code reuses no reliable selector', () => {
+    const code = `test('t', async ({ page }) => { await page.getByTestId('unrelated-thing').click(); });`;
+    expect(computeSelectorMemoryImpact(code, memory)).toBeNull();
+  });
+
+  it('does not claim credit for a risky selector just because the new code happens not to contain it', () => {
+    // Unrelated code that never touched the flaky selector at all — not evidence it was avoided on purpose.
+    const code = `test('t', async ({ page }) => { await page.getByTestId('unrelated-thing').click(); });`;
+    expect(computeSelectorMemoryImpact(code, memory)).toBeNull();
+  });
+
+  it('counts only the reliable selectors actually reused, summing their real success counts', () => {
+    const code = `test('t', async ({ page }) => { await page.getByTestId('login-btn').click(); });`;
+    const impact = computeSelectorMemoryImpact(code, memory);
+    expect(impact).toEqual({ reusedReliableCount: 1, pastRunsCovered: 5 });
+  });
+
+  it('sums past runs across multiple reused reliable selectors', () => {
+    const code = `
+      test('t', async ({ page }) => {
+        await page.getByTestId('login-btn').click();
+        await page.getByTestId('logout-btn').click();
+      });
+    `;
+    const impact = computeSelectorMemoryImpact(code, memory);
+    expect(impact).toEqual({ reusedReliableCount: 2, pastRunsCovered: 12 });
   });
 });
