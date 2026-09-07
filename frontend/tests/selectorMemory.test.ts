@@ -3,6 +3,7 @@ import {
   extractSelectorsFromCode,
   extractTestBlocks,
   formatSelectorMemoryForPrompt,
+  formatSharedSelectorMemoryForPrompt,
   computeSelectorMemoryImpact
 } from '../src/lib/server/selectorMemory';
 
@@ -161,5 +162,25 @@ describe('computeSelectorMemoryImpact', () => {
     `;
     const impact = computeSelectorMemoryImpact(code, memory);
     expect(impact).toEqual({ reusedReliableCount: 2, pastRunsCovered: 12 });
+  });
+});
+
+describe('formatSharedSelectorMemoryForPrompt', () => {
+  it('renders nothing when there is no community data', () => {
+    expect(formatSharedSelectorMemoryForPrompt({ reliable: [], risky: [] })).toBe('');
+  });
+
+  it('labels the section as community data, distinct from the account\'s own history', () => {
+    const text = formatSharedSelectorMemoryForPrompt({
+      reliable: [{ selector: 'getByTestId("login-btn")', kind: 'testid', successCount: 9, failureCount: 0, lastError: null }],
+      risky: [{ selector: 'locator(".submit-btn")', kind: 'css', successCount: 2, failureCount: 5, lastError: null }]
+    });
+
+    expect(text).toContain('COMMUNITY DATA');
+    expect(text).toContain('other AccuTest accounts');
+    expect(text).toContain('getByTestId("login-btn")');
+    expect(text).toContain('locator(".submit-btn")');
+    // Never reveals contributor counts or raw error text, even when present upstream — see the design doc.
+    expect(text).not.toMatch(/\d+ account/);
   });
 });

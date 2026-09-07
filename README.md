@@ -54,6 +54,7 @@
 | ▶️ Test Execution | ✅ | Real execution of generated Playwright test code against a configurable target URL, with real pass/fail results |
 | 🔁 Flaky Test Detection | ✅ | Per-test pass/fail history across runs, with a rolling flaky flag (mixed pass/fail in the last 10 runs) surfaced on both the package list and package detail views |
 | 🧠 Selector Memory | ✅ | Locators used by generated code are scored per-site from real run outcomes; the next AI generation for that site is given its known-reliable and known-flaky selectors so it can build on what's actually held up rather than guessing fresh each time |
+| 🌐 Shared Selector Memory | ✅ | Opt-in, off by default (Settings → Testing): aggregates selector reliability across accounts testing the same site. Requires 3+ distinct opted-in contributors before any aggregate is readable by anyone (enforced in the RLS policy itself), never reveals which accounts contributed or how many, and is refreshed by a scheduled database job — never a live cross-account query |
 | 📊 Dashboard Analytics | ✅ | Real-time stats, recent sessions, tasks, and packages |
 | 🔄 Test Sessions | ✅ | Create and manage test execution sessions |
 | ✅ Task Management | ✅ | Create and track tasks with priority levels |
@@ -171,6 +172,7 @@ Data is stored in Supabase PostgreSQL. Core tables referenced by the app include
 | `notifications` | User notifications |
 | `ai_generation_usage` | One row per successful AI generation, per user — an immutable log backing the 5/month free-tier cap and never derived from `test_packages` (which can be deleted) |
 | `selector_memory` | One row per (user, site hostname, locator) — real success/failure counts from execution, read back into the next AI generation for that site (see Selector Memory above) |
+| `selector_memory_shared` | Cross-account aggregate per (site hostname, locator) — populated by a `pg_cron`-scheduled rollup of opted-in accounts' own `selector_memory` rows, never written to directly by the app (see Shared Selector Memory above) |
 
 SQL migrations live in `frontend/migrations/`. Row-level security policies and full column definitions are managed in the Supabase project directly.
 
