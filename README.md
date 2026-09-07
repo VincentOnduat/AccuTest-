@@ -34,6 +34,7 @@
 - [Project Structure](#-project-structure)
 - [Quick Start](#-quick-start)
 - [API Endpoints](#-api-endpoints)
+- [Scheduled Execution](#-scheduled-execution)
 - [Database Schema](#-database-schema)
 - [License](#-license)
 
@@ -52,6 +53,7 @@
 | 🤖 AI Test Generation | ✅ | Real GPT-4o calls generate tests for 6 domains (Functional, Performance, Security, Accessibility, Visual, Data/ETL), grounded in the ATRD's own wording — a selector or route the document doesn't specify gets flagged as a placeholder for review rather than guessed. Capped at 5 free generations per user per month |
 | 🧪 Test Packages | ✅ | Create and manage test packages with automated code |
 | ▶️ Test Execution | ✅ | Real execution of generated Playwright test code against a configurable target URL, with real pass/fail results |
+| ⏰ Scheduled Execution | ✅\* | Opt in per package ("Run automatically every night") and it reruns on its own roughly every 24 hours with no one clicking Run — same real execution path, just triggered by a schedule instead of a person. \*Needs two env vars set to actually run; see [Scheduled Execution](#-scheduled-execution) below — without them the toggle still saves but nothing executes |
 | 🔁 Flaky Test Detection | ✅ | Per-test pass/fail history across runs, with a rolling flaky flag (mixed pass/fail in the last 10 runs) surfaced on both the package list and package detail views |
 | 🧠 Selector Memory | ✅ | Locators used by generated code are scored per-site from real run outcomes; the next AI generation for that site is given its known-reliable and known-flaky selectors so it can build on what's actually held up rather than guessing fresh each time |
 | 📊 Dashboard Analytics | ✅ | Real-time stats, recent sessions, tasks, and packages |
@@ -152,7 +154,22 @@ SvelteKit's own server routes.
 
 ## 🔌 API Endpoints
 
-The SvelteKit app serves its own server routes under `/api/*` (e.g. `ai/generate-test-package`, `ai/parse-atrd`, `ai/usage`, `atrd/*`, `packages/*`, `reports/*`, `business-reports/*`, `test-executions/*`, `test-runner`, `notifications`, `health`) that talk to Supabase and OpenAI directly from the server — see `frontend/src/routes/api/`.
+The SvelteKit app serves its own server routes under `/api/*` (e.g. `ai/generate-test-package`, `ai/parse-atrd`, `ai/usage`, `atrd/*`, `packages/*`, `reports/*`, `business-reports/*`, `test-executions/*`, `test-runner`, `notifications`, `health`) that talk to Supabase and OpenAI directly from the server — see `frontend/src/routes/api/`. `api/internal/scheduled-runs` is a separate, non-user-facing route — see Scheduled Execution below.
+
+## ⏰ Scheduled Execution
+
+Flaky detection and selector memory only learn anything when a package actually runs — without this, that meant only when a person remembered to click Run. Opting a package in ("Run automatically every night" on its detail page) has it rerun on its own roughly every 24 hours through the exact same real-execution path (`lib/server/packageRunner.ts`) a manual click uses — no separate implementation, no simulated results.
+
+**How it's triggered:** `pg_cron` + `pg_net`, both running inside the Supabase project itself, call `POST /api/internal/scheduled-runs` once an hour (staggering execution naturally, rather than every opted-in package firing at once). That route uses a service-role Supabase client to find every account's due packages and run them — inherently cross-account, so it can't go through a normal per-user RLS-scoped client, and it's why this route has its own secret-based auth instead of a user session.
+
+**Two env vars gate all of this, and it's inert without both:**
+
+| Variable | What it's for | Where to get it |
+|---|---|---|
+| `SUPABASE_SERVICE_ROLE_KEY` | Lets the route read/write across every account's packages | Supabase dashboard → Project Settings → API → `service_role` key (secret — never the anon key, never sent to the client) |
+| `CRON_SECRET` | Authenticates the scheduled trigger — the only thing gating this route, since there's no user session | Any random value you generate (e.g. `openssl rand -hex 32`) — must match what's stored in Supabase Vault as `cron_secret` (see `migrations/20260907000100_schedule_package_reruns.sql`, which stores it via Vault rather than as plaintext in a committed file) |
+
+Without either one set, `api/internal/scheduled-runs` returns a 503 explaining which is missing — it does not silently do nothing in a way that could be mistaken for "working, just idle." The per-package toggle always saves regardless; it just has no effect until both variables are set on the deployment.
 
 ## 🗄️ Database Schema
 
@@ -163,7 +180,7 @@ Data is stored in Supabase PostgreSQL. Core tables referenced by the app include
 | `profiles` | User profile data |
 | `tasks` | Automation tasks (linked to ATRDs and test packages) |
 | `atrd_results` | Parsed ATRD documents and metadata |
-| `test_packages` | Generated test packages and their code |
+| `test_packages` | Generated test packages and their code, plus `auto_rerun_enabled` / `next_scheduled_run_at` for Scheduled Execution above |
 | `tests` | Individual test cases |
 | `sessions` | Test execution sessions |
 | `test_executions` | Execution history and results |

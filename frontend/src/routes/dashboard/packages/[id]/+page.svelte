@@ -206,6 +206,31 @@
     }
   }
 
+  // Removes the human from the accumulation loop for this one package: an
+  // opted-in package gets picked up by the scheduled-runs cron (see
+  // lib/server/scheduledRuns.ts) roughly every 24 hours with no one having
+  // to click Run — real execution history, and the selector-memory/flaky
+  // detection it feeds, keeps accumulating even when nobody's looking.
+  // This just flips the flag; the actual run still goes through the exact
+  // same runPackageAndRecord path a manual click uses.
+  let togglingAutoRerun = false;
+
+  async function toggleAutoRerun() {
+    if (!pkg) return;
+    togglingAutoRerun = true;
+    const nextValue = !pkg.auto_rerun_enabled;
+
+    const { error: updateError } = await supabase
+      .from('test_packages')
+      .update({ auto_rerun_enabled: nextValue, next_scheduled_run_at: nextValue ? new Date().toISOString() : null })
+      .eq('id', id);
+
+    if (!updateError) {
+      pkg = { ...pkg, auto_rerun_enabled: nextValue };
+    }
+    togglingAutoRerun = false;
+  }
+
   // Extension per framework, matching the actual generated code style —
   // everything the backend routes through the Playwright generator (see
   // FRAMEWORK_LABELS in api/ai/generate-test-package) gets .spec.ts here too.
@@ -313,6 +338,11 @@
           Created {new Date(pkg.created_at).toLocaleDateString()} · {pkg.test_cases?.framework || 'playwright'} · id
           <code>{pkg.id}</code>
         </p>
+        <label class="auto-rerun-toggle">
+          <input type="checkbox" checked={pkg.auto_rerun_enabled} disabled={togglingAutoRerun} on:change={toggleAutoRerun} />
+          Run automatically every night
+          <span class="auto-rerun-hint" title="Real execution history accumulates on its own, whether or not anyone clicks Run — feeds flaky detection and selector memory faster than manual habit alone.">ⓘ</span>
+        </label>
       </div>
       <div class="header-actions">
         <button class="primary-btn" on:click={runTests} disabled={running}>
@@ -615,6 +645,25 @@
     background: #f3f4f6;
     padding: 0.05rem 0.3rem;
     border-radius: 0.25rem;
+    font-size: 0.75rem;
+  }
+
+  .auto-rerun-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    color: #374151;
+    cursor: pointer;
+    width: fit-content;
+  }
+  .auto-rerun-toggle input {
+    cursor: pointer;
+  }
+  .auto-rerun-hint {
+    color: #9ca3af;
+    cursor: help;
     font-size: 0.75rem;
   }
 
