@@ -3,11 +3,16 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
+  import ResultActionBar from '$lib/components/ResultActionBar.svelte';
 
   let session: any = null;
   let loading = true;
   let error = '';
   let running = false;
+  // Set once this browser session actually triggers a run — see the UX audit
+  // this replaces a true dead end with: previously, finishing a run here left
+  // nothing but a one-line sentence and a raw log dump, no next step at all.
+  let justRan = false;
 
   const sessionId = $page.params.id;
 
@@ -67,7 +72,7 @@
 
       // Refresh session data
       await fetchSessionDetails();
-      
+      justRan = true;
     } catch (err) {
       error = getErrorMessage(err);
     } finally {
@@ -131,6 +136,20 @@
         </div>
       </div>
     </div>
+
+    {#if justRan}
+      <ResultActionBar
+        tone={(session.failed_tests || 0) === 0 ? 'success' : 'error'}
+        status={(session.failed_tests || 0) === 0
+          ? `Session completed · ${session.passed_tests || 0}/${session.test_count || 0} passed`
+          : `Session completed · ${session.failed_tests} of ${session.test_count || 0} failed`}
+        substatus={session.duration ? `Took ${(session.duration / 1000).toFixed(1)}s` : undefined}
+        primaryLabel="Run Again"
+        primaryAction={runSession}
+        secondaryLabel="Back to Sessions"
+        secondaryAction={() => goto('/dashboard/sessions')}
+      />
+    {/if}
 
     <div class="stats-grid">
       <div class="stat-box">

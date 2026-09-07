@@ -25,7 +25,7 @@
         return;
       }
 
-      const { error: insertError } = await supabase
+      const { data, error: insertError } = await supabase
         .from('tasks')
         .insert([
           {
@@ -43,7 +43,10 @@
 
       if (insertError) throw insertError;
 
-      goto('/dashboard/tasks');
+      // Land on the new task itself, matching sessions/new and tests/new —
+      // "create X" landing back on the list instead of the thing you just
+      // made was one of the inconsistent-next-step patterns from the UX audit.
+      goto(`/dashboard/tasks/${data.id}`);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to create task';
     } finally {
