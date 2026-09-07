@@ -44,43 +44,51 @@
         .select('*')
         .eq('user_id', user.id);
       
-      // Get test executions
-      const { data: executions } = await supabase
+      // Get test executions — every one, not a page of them. This account's
+      // full execution history is exactly what backs "Pass Rate" and "Failed
+      // Tests" below, and a stat labeled as a total has to actually be one:
+      // a version of this that quietly capped the query at the 10 most
+      // recent rows shipped here before and made both numbers wrong for any
+      // account past 10 runs, with nothing on screen suggesting they were
+      // a sample. recentActivity (the actual recent-activity list) is
+      // sliced from this same result below instead of a second query.
+      const { data: allExecutions } = await supabase
         .from('test_executions')
         .select('*')
         .eq('user_id', user.id)
-        .order('executed_at', { ascending: false })
-        .limit(10);
-      
+        .order('executed_at', { ascending: false });
+
       // Calculate statistics
       let totalTestCases = 0;
       let criticalTests = 0;
-      
+
       packages?.forEach(pkg => {
         const testCases = pkg.test_cases?.testCases || [];
         totalTestCases += testCases.length;
         criticalTests += testCases.filter((tc: any) => tc.priority === 'Critical').length;
       });
-      
-      const passedExecutions = executions?.filter(e => e.status === 'passed').length || 0;
-      const passRate = executions?.length ? (passedExecutions / executions.length) * 100 : 0;
-      const failedTests = executions?.reduce((sum, e) => {
+
+      const passedExecutions = allExecutions?.filter(e => e.status === 'passed').length || 0;
+      const passRate = allExecutions?.length ? (passedExecutions / allExecutions.length) * 100 : 0;
+      const failedTests = allExecutions?.reduce((sum, e) => {
         return sum + (e.test_results?.filter((r: { status: string }) => r.status === 'failed').length || 0);
       }, 0) || 0;
-      
+
       stats = {
         totalATRDs: atrdCount || 0,
         totalTestPackages: packages?.length || 0,
         totalTestCases: totalTestCases,
-        totalExecutions: executions?.length || 0,
+        totalExecutions: allExecutions?.length || 0,
         passRate: Math.round(passRate),
         criticalTests: criticalTests,
         failedTests: failedTests,
         recentlyUsed: (packages || []).slice(0, 5)
       };
-      
-      recentActivity = executions || [];
-      
+
+      // The one place a fixed-size slice is still correct: an actual "recent
+      // activity" list, which never claimed to be a total in the first place.
+      recentActivity = (allExecutions || []).slice(0, 10);
+
     } catch (err) {
       console.error('Error loading analytics:', err);
     } finally {
@@ -156,6 +164,9 @@
     <!-- Recent Activity -->
     <div class="section">
       <h2>Recent Test Executions</h2>
+      {#if stats.totalExecutions > recentActivity.length}
+        <p class="section-hint">Showing the {recentActivity.length} most recent of {stats.totalExecutions} total.</p>
+      {/if}
       {#if recentActivity.length === 0}
         <div class="empty-state">
           <p>No test executions yet. Run your first test!</p>
@@ -305,6 +316,12 @@
     font-size: 1.25rem;
     color: #1f2937;
     margin-bottom: 1rem;
+  }
+
+  .section-hint {
+    font-size: 0.8125rem;
+    color: #6b7280;
+    margin: -0.5rem 0 1rem;
   }
   
   .activity-list {

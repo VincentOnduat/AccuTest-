@@ -32,11 +32,13 @@
   let selectedTestDomain: TestDomainId = 'functional';
   
   // Dashboard stats
-  let stats = {
+  let stats: { totalSessions: number; activeSessions: number; totalTests: number; successRate: number | null } = {
     totalSessions: 0,
     activeSessions: 0,
     totalTests: 0,
-    successRate: 0
+    // null, not 0 — "no runs yet" and "a real 0% pass rate" are different
+    // facts and shouldn't look the same on screen.
+    successRate: null
   };
   let recentSessions: any[] = [];
   let upcomingTasks: any[] = [];
@@ -160,6 +162,20 @@
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id);
 
+      // Real pass rate across every real execution this account has ever run —
+      // this used to be a hardcoded 94, unconnected to any real data. Two
+      // exact counts rather than fetching every row, same as the counts above.
+      const { count: totalRunsCount } = await supabase
+        .from('test_executions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+
+      const { count: passedRunsCount } = await supabase
+        .from('test_executions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'passed');
+
       const { data: sessions } = await supabase
         .from('sessions')
         .select('*')
@@ -179,7 +195,7 @@
         totalSessions: sessionsCount || 0,
         activeSessions: activeCount || 0,
         totalTests: testsCount || 0,
-        successRate: 94
+        successRate: totalRunsCount ? Math.round(((passedRunsCount || 0) / totalRunsCount) * 100) : null
       };
 
       recentSessions = sessions || [];
@@ -414,6 +430,13 @@
           <span class="stat-value">{recentATRDs.length}</span>
         </div>
       </button>
+      <button class="stat-card" type="button" on:click={() => goto('/dashboard/analytics')}>
+        <div class="stat-icon success">✅</div>
+        <div class="stat-content">
+          <span class="stat-label">Success Rate</span>
+          <span class="stat-value">{stats.successRate === null ? '—' : `${stats.successRate}%`}</span>
+        </div>
+      </button>
     </div>
 
     <!-- RECENT ACTIVITY: everything you've already done, grouped and labeled
@@ -577,6 +600,7 @@
   .stat-icon.green { background: #d1fae5; color: #065f46; }
   .stat-icon.purple { background: #ede9fe; color: #5b21b6; }
   .stat-icon.orange { background: #fed7aa; color: #92400e; }
+  .stat-icon.success { background: #d1fae5; color: #10b981; }
   .stat-content { flex: 1; }
   .stat-label { display: block; font-size: 0.875rem; color: #6b7280; margin-bottom: 0.25rem; }
   .stat-value { display: block; font-size: 1.5rem; font-weight: 600; color: #1f2937; }
