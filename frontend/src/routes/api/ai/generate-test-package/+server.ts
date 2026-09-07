@@ -16,7 +16,13 @@ import { env as privateEnv } from '$env/dynamic/private';
 import { assertSafeTargetUrl, UnsafeTargetUrlError } from '$lib/server/targetUrl';
 import { checkRateLimit } from '$lib/server/rateLimit';
 import { getMonthlyUsage, recordGeneration, upgradeMessage } from '$lib/server/generationUsage';
-import { getSelectorMemoryForHost, formatSelectorMemoryForPrompt } from '$lib/server/selectorMemory';
+import {
+  getSelectorMemoryForHost,
+  formatSelectorMemoryForPrompt,
+  getSharedSelectorMemory,
+  formatSharedSelectorMemoryForPrompt,
+  computeSelectorMemoryImpact
+} from '$lib/server/selectorMemory';
 
 const TEST_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'] as const;
 
@@ -206,8 +212,17 @@ export async function POST({ request }) {
     const selectorMemory = await getSelectorMemoryForHost(supabase, user.id, memoryLookupHost);
     const selectorMemorySection = formatSelectorMemoryForPrompt(selectorMemory);
 
+    // Cross-account layer (see "The Shared-Memory Design"): RLS on
+    // selector_memory_shared enforces both the anonymity floor and the
+    // paired opt-in requirement, so this simply returns nothing for an
+    // account that hasn't opted in — no extra branching needed here.
+    // Always rendered as its own section, never merged with the personal
+    // one above.
+    const sharedSelectorMemory = await getSharedSelectorMemory(supabase, memoryLookupHost);
+    const sharedSelectorMemorySection = formatSharedSelectorMemoryForPrompt(sharedSelectorMemory);
+
     const openai = createOpenAI({ apiKey: OPENAI_API_KEY });
-    const { system, prompt } = buildPrompt(document, testDomain, framework, selectorMemorySection);
+    const { system, prompt } = buildPrompt(document, testDomain, framework, selectorMemorySection + sharedSelectorMemorySection);
 
     let testCode: string;
     let testCases: z.infer<typeof TestPackageSchema>['testCases'];
@@ -229,6 +244,11 @@ export async function POST({ request }) {
       console.error('AI generation failed:', aiError);
       return json({ error: 'Test generation failed — the AI service did not return a usable result' }, { status: 502 });
     }
+
+    // Makes the loop's value visible at the moment a user would otherwise be
+    // comparing this to a free chat tool, rather than only in a package's
+    // History tab later — see computeSelectorMemoryImpact's own comment.
+    const selectorMemoryImpact = computeSelectorMemoryImpact(testCode, selectorMemory);
 
     const testPackage = {
       testCases: testCases,
@@ -288,7 +308,8 @@ export async function POST({ request }) {
       requiresReview: requiresReview,
       unresolvedFields: unresolvedFields,
       summary: testPackage.summary,
-      usage: usageAfter
+      usage: usageAfter,
+      selectorMemoryImpact
     });
     
   } catch (error) {

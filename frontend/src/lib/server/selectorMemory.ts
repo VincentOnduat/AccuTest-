@@ -266,6 +266,59 @@ export async function getSelectorMemoryForHost(
   return { reliable, risky };
 }
 
+/**
+ * Reads back the CROSS-ACCOUNT aggregate for a site — see migrations/
+ * 20260906010000_create_selector_memory_shared.sql and "The Shared-Memory
+ * Design" for the full reasoning. Two things enforce safety here, both at
+ * the database level rather than in this function:
+ *
+ *   - RLS on selector_memory_shared only returns a row once at least 3
+ *     distinct opted-in accounts have contributed to it (the anonymity
+ *     floor) — if a row comes back here at all, it already cleared that bar.
+ *   - That same RLS policy also requires the CALLING account to have its own
+ *     sharing preference on — the paired opt-in. An account that hasn't
+ *     opted in gets zero rows back, silently, with no special-casing needed
+ *     here.
+ *
+ * Deliberately never selects contributor_count: the design only ever
+ * reveals "this cleared the anonymity bar," never how many accounts are
+ * actually behind it or which ones.
+ */
+export async function getSharedSelectorMemory(supabase: SupabaseClient, targetUrl: string | null | undefined): Promise<SelectorMemory> {
+  if (!targetUrl) return { reliable: [], risky: [] };
+
+  let host: string;
+  try {
+    host = new URL(targetUrl).hostname;
+  } catch {
+    return { reliable: [], risky: [] };
+  }
+
+  const { data, error } = await supabase.from('selector_memory_shared').select('selector, selector_kind, success_count, failure_count').eq('target_host', host);
+
+  if (error || !data) return { reliable: [], risky: [] };
+
+  const records: SelectorRecord[] = data.map((row) => ({
+    selector: row.selector,
+    kind: row.selector_kind || 'css',
+    successCount: row.success_count ?? 0,
+    failureCount: row.failure_count ?? 0,
+    lastError: null // raw error text never crosses the account boundary — see the design doc
+  }));
+
+  const reliable = records
+    .filter((r) => r.failureCount === 0 && r.successCount >= RELIABLE_MIN_SUCCESSES)
+    .sort((a, b) => b.successCount - a.successCount)
+    .slice(0, MAX_PER_LIST);
+
+  const risky = records
+    .filter((r) => r.failureCount >= RISKY_MIN_FAILURES && r.failureCount >= r.successCount)
+    .sort((a, b) => b.failureCount - a.failureCount)
+    .slice(0, MAX_PER_LIST);
+
+  return { reliable, risky };
+}
+
 /** Renders selector memory as a prompt section, or '' when there's nothing worth saying yet (e.g. a brand-new site). */
 export function formatSelectorMemoryForPrompt(memory: SelectorMemory): string {
   if (memory.reliable.length === 0 && memory.risky.length === 0) return '';
@@ -294,4 +347,72 @@ export function formatSelectorMemoryForPrompt(memory: SelectorMemory): string {
   );
 
   return lines.join('\n');
+}
+
+/**
+ * Renders the CROSS-ACCOUNT aggregate as its own, clearly-separate prompt
+ * section — never merged into formatSelectorMemoryForPrompt's output. The
+ * two claims carry different weight ("this account has verified it" vs.
+ * "other accounts have reported it"), and the prompt — and anyone reading
+ * the generated result — should always be able to tell which is which.
+ */
+export function formatSharedSelectorMemoryForPrompt(memory: SelectorMemory): string {
+  if (memory.reliable.length === 0 && memory.risky.length === 0) return '';
+
+  const lines: string[] = [
+    '',
+    'COMMUNITY DATA — from other AccuTest accounts testing this same site, anonymized and opt-in only. This is NOT this account\'s own history — treat it as a weaker, secondary signal, never a replacement for the SELECTOR MEMORY section above when both are present:'
+  ];
+
+  if (memory.reliable.length > 0) {
+    lines.push(
+      'Locators other accounts have also seen hold up on this site:',
+      ...memory.reliable.map((r) => `  - ${r.selector}`)
+    );
+  }
+
+  if (memory.risky.length > 0) {
+    lines.push(
+      'Locators other accounts have also seen fail on this site — treat as a caution, not a hard rule:',
+      ...memory.risky.map((r) => `  - ${r.selector}`)
+    );
+  }
+
+  lines.push(
+    'Same grounding rule applies: never invent a selector the ATRD doesn\'t name, even one mentioned here.'
+  );
+
+  return lines.join('\n');
+}
+
+export interface SelectorMemoryImpact {
+  reusedReliableCount: number;
+  /** Sum of successCount across just the reliable selectors this generation actually reused — not a global run count for the site. */
+  pastRunsCovered: number;
+}
+
+/**
+ * How much this specific generation actually drew on selector memory — not just
+ * "memory existed for this site," but "the code just written reused a specific
+ * locator this account has seen hold up before." Returns null when there's
+ * nothing worth reporting (brand-new site, or a generation that happened not to
+ * reuse any selector with a track record).
+ *
+ * Deliberately doesn't try to claim credit for "avoiding" a known-flaky selector:
+ * a generated file simply not containing that selector string is true of almost
+ * any code, including code that has nothing to do with that part of the page —
+ * absence isn't evidence the model steered around it on purpose, and reporting it
+ * as if it were would be the same kind of overclaim this loop is supposed to be
+ * an honest alternative to.
+ */
+export function computeSelectorMemoryImpact(generatedCode: string, memory: SelectorMemory): SelectorMemoryImpact | null {
+  const generatedSelectors = new Set(extractSelectorsFromCode(generatedCode).map((s) => s.selector));
+  const reusedReliable = memory.reliable.filter((r) => generatedSelectors.has(r.selector));
+
+  if (reusedReliable.length === 0) return null;
+
+  return {
+    reusedReliableCount: reusedReliable.length,
+    pastRunsCovered: reusedReliable.reduce((sum, r) => sum + r.successCount, 0)
+  };
 }

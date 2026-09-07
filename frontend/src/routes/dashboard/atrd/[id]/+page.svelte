@@ -40,6 +40,23 @@
   let targetUrl = '';
   let usage: { used: number; limit: number; remaining: number; resetsAt: string } | null = null;
   let limitMessage = '';
+  // Selector memory's visible payoff, attached to the specific package it came from —
+  // shown inline right here at generation time (see lib/server/selectorMemory.ts),
+  // not only in that package's own History tab, since this is the moment someone is
+  // actually deciding whether this beat writing the same test in a chat window.
+  let lastGeneratedPackageId: string | null = null;
+  let lastGenerationImpact: { reusedReliableCount: number; pastRunsCovered: number } | null = null;
+
+  // Only ever claims what's actually checkable: a specific locator string from this
+  // account's real run history appears in the code just generated. Deliberately says
+  // nothing about "avoiding" flaky selectors — a generation simply not containing one
+  // isn't evidence it was steered around on purpose (see computeSelectorMemoryImpact).
+  function formatSelectorMemoryImpact(impact: typeof lastGenerationImpact): string {
+    if (!impact || impact.reusedReliableCount === 0) return '';
+    const locators = impact.reusedReliableCount === 1 ? 'locator' : 'locators';
+    const runs = impact.pastRunsCovered === 1 ? 'run' : 'runs';
+    return `Reused ${impact.reusedReliableCount} ${locators} already verified reliable across ${impact.pastRunsCovered} past ${runs} on this site.`;
+  }
 
   $: id = $page.params.id;
 
@@ -149,6 +166,8 @@
       if (response.ok) {
         alert(`✅ Test package generated! ID: ${result.id}`);
         if (result?.usage) usage = result.usage;
+        lastGeneratedPackageId = result?.id ?? null;
+        lastGenerationImpact = result?.selectorMemoryImpact ?? null;
         await loadTestPackages();
         showTestPackages = true;
       } else if (result?.limitReached) {
@@ -419,6 +438,9 @@
                   <span>📅 {new Date(pkg.created_at).toLocaleDateString()}</span>
                   <span>🧪 {pkg.test_cases?.testCases?.length || 0} test cases</span>
                 </div>
+                {#if pkg.id === lastGeneratedPackageId && lastGenerationImpact}
+                  <p class="selector-memory-impact">🧠 {formatSelectorMemoryImpact(lastGenerationImpact)}</p>
+                {/if}
                 <button class="btn-view-small" on:click={() => goto(`/dashboard/packages/${pkg.id}`)}>
                   View Details
                 </button>
@@ -782,7 +804,18 @@
   .status-badge.completed { background: #d1fae5; color: #065f46; }
   .status-badge.failed { background: #fee2e2; color: #991b1b; }
   .status-badge.review { background: #fef3c7; color: #92400e; }
-  
+
+  .selector-memory-impact {
+    flex-basis: 100%;
+    margin: 0;
+    padding: 0.5rem 0.625rem;
+    background: #d1fae5;
+    color: #065f46;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
   .btn-view-small {
     background: #667eea;
     color: white;
