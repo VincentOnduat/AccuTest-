@@ -190,9 +190,11 @@
                   <span>📅 {new Date(exec.executed_at).toLocaleString()}</span>
                 </div>
               </div>
-              <button class="view-btn" on:click={() => goto(`/dashboard/test-executions/${exec.id}`)}>
-                View Details →
-              </button>
+              {#if exec.package_id}
+                <button class="view-btn" on:click={() => goto(`/dashboard/packages/${exec.package_id}`)}>
+                  View Package →
+                </button>
+              {/if}
             </div>
           {/each}
         </div>

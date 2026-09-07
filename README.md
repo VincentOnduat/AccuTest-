@@ -108,8 +108,7 @@ AccuTest-/
 │   │   │   ├── login/        # Sign in
 │   │   │   ├── signup/       # Self-serve sign up
 │   │   │   ├── dashboard/    # UI: atrd, packages, tasks, sessions,
-│   │   │   │                 #     tests, analytics, test-execution,
-│   │   │   │                 #     profile, settings
+│   │   │   │                 #     tests, analytics, profile, settings
 │   │   │   └── api/          # SvelteKit API routes: ai, atrd, auth,
 │   │   │                     #     packages, reports, business-reports,
 │   │   │                     #     test-executions, test-runner, run-session,
