@@ -10,7 +10,8 @@
     notifications: true,
     email_notifications: true,
     slack_webhook: '',
-    target_url: ''
+    target_url: '',
+    share_selector_memory: false
   };
 
   let loading = true;
@@ -164,6 +165,21 @@
                 any test package with its own "Website to test" set at generation time uses that
                 instead. Only public URLs are accepted — internal/private addresses are rejected
                 when a test actually runs.
+              </p>
+            </div>
+
+            <div class="checkbox-group">
+              <label>
+                <input type="checkbox" bind:checked={profile.share_selector_memory} />
+                Share anonymized selector reliability with the community
+              </label>
+              <p class="field-hint">
+                Share anonymized selector reliability with other AccuTest accounts testing the
+                same sites, and see their aggregated data too — <strong>off by default</strong>,
+                and both directions are tied together: this only shows you community data if
+                you're also contributing your own. We never share which account contributed
+                what, and never share data for a site until enough other accounts have opted in
+                to make it genuinely anonymous.
               </p>
             </div>
           </section>
