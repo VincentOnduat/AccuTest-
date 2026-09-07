@@ -2,6 +2,8 @@
   import { supabase } from '$lib/supabase';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { confirmDialog } from '$lib/stores/confirmDialog';
+  import { toast } from '$lib/stores/toast';
 
   let profile: any = {
     full_name: '',
@@ -16,7 +18,6 @@
 
   let loading = true;
   let saving = false;
-  let message = '';
 
   onMount(async () => {
     await loadProfile();
@@ -49,7 +50,6 @@
 
   async function saveSettings() {
     saving = true;
-    message = '';
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -65,10 +65,9 @@
 
       if (error) throw error;
 
-      message = 'Settings saved successfully!';
-      setTimeout(() => message = '', 3000);
+      toast.success('Settings saved.');
     } catch (err) {
-      message = 'Error saving settings: ' + (err instanceof Error ? err.message : String(err));
+      toast.error('Error saving settings: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       saving = false;
     }
@@ -76,17 +75,30 @@
 
   async function resetPassword() {
     const { error } = await supabase.auth.resetPasswordForEmail(profile.email);
-    if (!error) {
-      message = 'Password reset email sent!';
+    if (error) {
+      toast.error(`Failed to send reset email: ${error.message}`);
+      return;
     }
+    toast.success('Password reset email sent!');
   }
 
+  // Full self-serve account deletion isn't wired up yet (it needs an admin-level
+  // server route, not something the client can safely do on its own) — see
+  // lib/server/generationUsage.ts's UPGRADE_CONTACT_EMAIL for the same pattern
+  // elsewhere in the app. Signing the user out and pointing them at support is
+  // honest about that; silently pretending to delete the account isn't.
   async function deleteAccount() {
-    if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-      // Delete account logic here
-      await supabase.auth.signOut();
-      goto('/');
-    }
+    const confirmed = await confirmDialog({
+      title: 'Delete your account?',
+      message:
+        "This signs you out now. Full self-serve deletion isn't available yet — email support@accutest.tech to finish deleting your account and its data.",
+      confirmLabel: 'Sign out and request deletion',
+      danger: true
+    });
+    if (!confirmed) return;
+
+    await supabase.auth.signOut();
+    goto('/');
   }
 </script>
 
@@ -220,10 +232,6 @@
             </button>
           </section>
 
-          {#if message}
-            <div class="message">{message}</div>
-          {/if}
-
           <div class="actions">
             <button type="submit" class="primary-btn" disabled={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
@@ -355,14 +363,6 @@
 
   .checkbox-group input {
     width: auto;
-  }
-
-  .message {
-    padding: 0.75rem;
-    background: #d1fae5;
-    color: #065f46;
-    border-radius: 0.375rem;
-    margin-bottom: 1rem;
   }
 
   .actions {

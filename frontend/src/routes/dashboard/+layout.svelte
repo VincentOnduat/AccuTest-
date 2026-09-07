@@ -3,6 +3,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
+  import ToastHost from '$lib/components/ToastHost.svelte';
+  import ConfirmDialogHost from '$lib/components/ConfirmDialogHost.svelte';
   
   let user: any = null;
   let mobileMenuOpen = false;
@@ -195,6 +197,9 @@
   <main class="main-content">
     <slot />
   </main>
+
+  <ToastHost />
+  <ConfirmDialogHost />
 </div>
 
 <style>

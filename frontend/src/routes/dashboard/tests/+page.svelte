@@ -2,6 +2,8 @@
   import { supabase } from '$lib/supabase';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { confirmDialog } from '$lib/stores/confirmDialog';
+  import { toast } from '$lib/stores/toast';
 
   let tests: any[] = [];
   let loading = true;
@@ -38,10 +40,21 @@
 
   async function deleteTest(id: string, event: Event) {
     event.stopPropagation();
-    if (confirm('Are you sure you want to delete this test?')) {
-      await supabase.from('tests').delete().eq('id', id);
-      await fetchTests();
+    const confirmed = await confirmDialog({
+      title: 'Delete this test?',
+      message: 'This permanently removes the test and its history. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
+
+    const { error: deleteError } = await supabase.from('tests').delete().eq('id', id);
+    if (deleteError) {
+      toast.error(`Failed to delete test: ${deleteError.message}`);
+      return;
     }
+    toast.success('Test deleted.');
+    await fetchTests();
   }
 </script>
 

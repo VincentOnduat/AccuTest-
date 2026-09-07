@@ -4,6 +4,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { fade } from 'svelte/transition';
+  import { confirmDialog } from '$lib/stores/confirmDialog';
+  import { toast } from '$lib/stores/toast';
 
   let pkg: any = null;
   let loading = true;
@@ -148,7 +150,13 @@
   }
 
   async function deletePackage() {
-    if (!confirm('Delete this test package?')) return;
+    const confirmed = await confirmDialog({
+      title: 'Delete this test package?',
+      message: "You won't be able to see this package or its run history afterward. This cannot be undone.",
+      confirmLabel: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -162,11 +170,11 @@
       if (response.ok) {
         goto('/dashboard/packages');
       } else {
-        alert('Failed to delete');
+        toast.error('Failed to delete package.');
       }
     } catch (err) {
       console.error('Delete error:', err);
-      alert('Error deleting');
+      toast.error('Error deleting package.');
     }
   }
 
@@ -256,7 +264,7 @@
 
   function copyToClipboard() {
     navigator.clipboard.writeText(exportableCode());
-    alert('Copied to clipboard!');
+    toast.success('Copied to clipboard.');
   }
 
   function downloadCode() {
