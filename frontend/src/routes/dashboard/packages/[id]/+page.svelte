@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { fade } from 'svelte/transition';
+  import ResultActionBar from '$lib/components/ResultActionBar.svelte';
 
   let pkg: any = null;
   let loading = true;
@@ -18,6 +19,10 @@
   // Run Results tab.
   let executions: any[] = [];
   let selectedExecutionId: string | null = null;
+  // Set once, right after a run this browser session actually triggered — drives
+  // ResultActionBar below. Browsing an older execution from History shouldn't show
+  // a "here's what to do next" bar for a run that already happened a while ago.
+  let justRanExecutionId: string | null = null;
   // This package's site's selector memory (see lib/server/selectorMemory.ts) — real
   // pass/fail history for the locators generated code has actually used against this
   // host, across every package run against it, not just this one. Empty until the
@@ -198,6 +203,7 @@
         // lifecycle status (draft → active on its first run) — refresh both.
         await Promise.all([loadExecutions(), loadPackage()]);
         selectedExecutionId = result.execution_id;
+        justRanExecutionId = result.execution_id;
       }
     } catch (err) {
       runError = err instanceof Error ? err.message : String(err);
@@ -478,6 +484,19 @@
             {#if selectedExecution}
               {@const s = execSummary(selectedExecution)}
               <div class="run-detail">
+                {#if selectedExecution.id === justRanExecutionId}
+                  <ResultActionBar
+                    tone={selectedExecution.status === 'passed' ? 'success' : 'error'}
+                    status={selectedExecution.status === 'passed'
+                      ? `Run passed · ${s.passed}/${s.total} tests`
+                      : `Run finished · ${s.passed}/${s.total} tests passed`}
+                    substatus={s.failed > 0 ? `${s.failed} test${s.failed === 1 ? '' : 's'} need a look — see below` : undefined}
+                    primaryLabel="Run Again"
+                    primaryAction={runTests}
+                    secondaryLabel="View History"
+                    secondaryAction={() => (activeTab = 'history')}
+                  />
+                {/if}
                 <div class="run-stats-row">
                   <div class="stat">
                     <span class="stat-value">{s.total}</span>

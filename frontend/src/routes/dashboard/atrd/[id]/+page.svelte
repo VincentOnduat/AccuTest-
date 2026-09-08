@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabase';
+  import ResultActionBar from '$lib/components/ResultActionBar.svelte';
 
   // Auth fetch helper — attaches the Bearer token, mirroring the pattern used
   // on the main dashboard and ATRD list pages. Plain fetch() with only
@@ -59,6 +60,10 @@
   }
 
   $: id = $page.params.id;
+  // The generation result shown by ResultActionBar, right below the header where
+  // Generate Tests was just clicked — see the UX audit this replaces the old
+  // alert() + buried collapsible-section pattern for.
+  $: lastGeneratedPackage = testPackages.find((p) => p.id === lastGeneratedPackageId) ?? null;
 
   onMount(async () => {
     await loadATRD();
@@ -164,7 +169,9 @@
       const result = await response.json().catch(() => null);
 
       if (response.ok) {
-        alert(`✅ Test package generated! ID: ${result.id}`);
+        // No more alert() here — the result is shown inline via ResultActionBar,
+        // right where the eye already is, instead of a modal that just repeats
+        // a raw ID back at the user and has to be dismissed before doing anything else.
         if (result?.usage) usage = result.usage;
         lastGeneratedPackageId = result?.id ?? null;
         lastGenerationImpact = result?.selectorMemoryImpact ?? null;
@@ -412,6 +419,15 @@
         <div class="banner limit">⚠️ {limitMessage}</div>
       {/if}
     </div>
+
+    {#if lastGeneratedPackage}
+      <ResultActionBar
+        status="Test package generated · {lastGeneratedPackage.test_cases?.testCases?.length || 0} test cases"
+        substatus={formatSelectorMemoryImpact(lastGenerationImpact) || undefined}
+        primaryLabel="View Test Package"
+        primaryAction={() => goto(`/dashboard/packages/${lastGeneratedPackage.id}`)}
+      />
+    {/if}
 
     <!-- Test Packages Section -->
     {#if testPackages.length > 0 || showTestPackages}

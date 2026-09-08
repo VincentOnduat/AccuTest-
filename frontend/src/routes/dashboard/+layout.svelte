@@ -91,11 +91,6 @@
         {#if !collapsed}<span class="nav-text">Tests</span>{/if}
       </a>
 
-      <a href="/dashboard/test-execution" class="nav-item" class:active={isActive('/dashboard/test-execution')}>
-        <span class="nav-icon">▶️</span>
-        {#if !collapsed}<span class="nav-text">Test Execution</span>{/if}
-      </a>
-
       <a href="/dashboard/analytics" class="nav-item" class:active={isActive('/dashboard/analytics')}>
         <span class="nav-icon">📊</span>
         {#if !collapsed}<span class="nav-text">Analytics</span>{/if}
@@ -166,10 +161,6 @@
         <a href="/dashboard/tests" class="nav-item" on:click={() => mobileMenuOpen = false}>
           <span class="nav-icon">🧪</span>
           <span class="nav-text">Tests</span>
-        </a>
-        <a href="/dashboard/test-execution" class="nav-item" on:click={() => mobileMenuOpen = false}>
-          <span class="nav-icon">▶️</span>
-          <span class="nav-text">Test Execution</span>
         </a>
         <a href="/dashboard/analytics" class="nav-item" on:click={() => mobileMenuOpen = false}>
           <span class="nav-icon">📊</span>
