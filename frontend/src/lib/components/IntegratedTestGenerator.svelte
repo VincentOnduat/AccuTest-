@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabase';
+  import ResultActionBar from './ResultActionBar.svelte';
 
   export let userId: string = '';
   export let initialDomain: 'functional' | 'performance' | 'security' | 'accessibility' | 'visual' | 'dataQuality' = 'functional';
@@ -407,10 +409,15 @@
             <p class="field-hint">🌐 Targets: {targetUrl.trim()}</p>
           {/if}
         </div>
-        <div class="results-actions">
-          <button class="action-btn" on:click={resetForm}>🔄 New</button>
-        </div>
       </div>
+
+      <ResultActionBar
+        status="Test package generated · {generatedPackage.automated?.testCases?.length || 0} test cases"
+        primaryLabel="View Test Package"
+        primaryAction={() => goto(`/dashboard/packages/${generatedPackage.metadata.id}`)}
+        secondaryLabel="Generate Another"
+        secondaryAction={resetForm}
+      />
 
       <div class="tabs">
         <button class="tab-btn {activeTab === 'automated' ? 'active' : ''}" on:click={() => activeTab = 'automated'}>
@@ -626,25 +633,6 @@
     font-size: 1rem;
     color: #1f2937;
     margin: 0;
-  }
-
-  .results-actions {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .action-btn {
-    padding: 0.25rem 0.75rem;
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    font-size: 0.875rem;
-    color: #374151;
-  }
-
-  .action-btn:hover {
-    background: #e5e7eb;
   }
 
   .tabs {
