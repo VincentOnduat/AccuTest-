@@ -414,7 +414,12 @@
       <ResultActionBar
         status="Test package generated · {generatedPackage.automated?.testCases?.length || 0} test cases"
         primaryLabel="View Test Package"
-        primaryAction={() => goto(`/dashboard/packages/${generatedPackage.metadata.id}`)}
+        primaryAction={() => {
+          // The API always returns a real id on a successful save (see api/ai/generate-test-package) —
+          // this guard is only for the case that assumption stops holding, so a broken save can't
+          // send someone to a /dashboard/packages/undefined dead end.
+          if (generatedPackage.metadata.id) goto(`/dashboard/packages/${generatedPackage.metadata.id}`);
+        }}
         secondaryLabel="Generate Another"
         secondaryAction={resetForm}
       />
